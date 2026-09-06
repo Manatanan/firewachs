@@ -179,6 +179,38 @@ input,select,button{max-width:100%;min-width:0;}
 .leaflet-container{width:100%!important;max-width:100%;height:100%;overflow:hidden;}
 .table-wrap{width:100%;max-width:100%;overflow-x:auto;}
 .table-wrap table{width:100%;min-width:650px;}
+
+/* =========================================================
+   LOGIN / ROLE UI
+   ========================================================= */
+body.app-locked .container{display:none;}
+#loginOverlay{
+  position:fixed;inset:0;background:rgba(15,35,25,.72);z-index:99999;
+  display:flex;align-items:center;justify-content:center;padding:18px;
+}
+#loginCard{
+  width:min(460px,100%);background:#fff;border-radius:18px;padding:24px;
+  box-shadow:0 20px 60px rgba(0,0,0,.25);
+}
+#loginCard h2{margin:0 0 8px;font-size:24px}
+.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.mode-btn{margin:0;background:#eef3ef;color:#174d35;border:2px solid transparent}
+.mode-btn.active{background:#174d35;color:#fff;border-color:#174d35}
+#roleBar{
+  position:sticky;top:0;z-index:1000;background:#fff;border-bottom:1px solid #dfe7e1;
+  padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.06);
+}
+#roleBar button{width:auto;margin:0;padding:7px 12px}
+.role-pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#e8f3eb;font-weight:700;color:#174d35}
+.role-pill.demo{background:#fff0d6;color:#9a5a00}
+.role-pill.officer{background:#e5efff;color:#174b8a}
+.officer-only,.demo-only{display:none!important}
+body.role-officer .officer-only{display:block!important}
+body.role-demo .demo-only{display:block!important}
+body.role-officer button.officer-only,body.role-demo button.demo-only{display:block!important}
+.login-note{font-size:12px;color:#66736b;line-height:1.5;margin-top:10px}
+
 </style>
 </head>
 
@@ -188,6 +220,37 @@ input,select,button{max-width:100%;min-width:0;}
   <h1>🔥 ระบบแจ้งเตือนไฟป่า</h1>
   <p>GISTDA VIIRS → เว็บไซต์ → ESP32 → Pilot Lamp / Buzzer / LCD</p>
 </header>
+
+<div id="roleBar" style="display:none">
+  <div>
+    <span id="rolePill" class="role-pill">👤 ประชาชนทั่วไป</span>
+    <span id="roleName">เข้าสู่ระบบแล้ว</span>
+  </div>
+  <button class="secondary" onclick="logoutFireWatch()">ออกจากระบบ</button>
+</div>
+
+<div id="loginOverlay">
+  <div id="loginCard">
+    <h2>🔥 FIRE WATCH</h2>
+    <div class="small">เข้าสู่ระบบเพื่อเลือกสิทธิ์การใช้งาน</div>
+
+    <div class="mode-grid">
+      <button id="modePublic" class="mode-btn active" onclick="selectLoginRole('public')">👤<br>ประชาชน</button>
+      <button id="modeOfficer" class="mode-btn" onclick="selectLoginRole('officer')">🚒<br>เจ้าหน้าที่</button>
+      <button id="modeDemo" class="mode-btn" onclick="selectLoginRole('demo')">🧪<br>ทดลอง</button>
+    </div>
+
+    <div id="credentialBox" style="display:none">
+      <label>ชื่อผู้ใช้</label>
+      <input id="loginUsername" autocomplete="username" placeholder="Username">
+      <label>รหัสผ่าน</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password">
+    </div>
+
+    <button onclick="loginFireWatch()">เข้าสู่ระบบ</button>
+    <div id="loginMessage" class="login-note"></div>
+  </div>
+</div>
 
 <div class="container">
 
@@ -351,6 +414,13 @@ input,select,button{max-width:100%;min-width:0;}
         </tr>
       </tbody>
     </table></div>
+  </div>
+
+  <div class="card officer-only demo-only">
+    <h2>📱 LINE แจ้งเตือน</h2>
+    <div class="small">ทดสอบการส่งข้อความผ่าน LINE Messaging API</div>
+    <button onclick="testLineFromWeb()">📨 ส่งข้อความทดสอบ LINE</button>
+    <div id="lineStatus" class="small" style="margin-top:8px"></div>
   </div>
 
   <div class="card">
@@ -980,7 +1050,7 @@ async function sendCurrentToEsp32(){
 
   if(!esp32Url){
 
-    alert("กรุณาใส่ ESP32 URL");
+    log("ESP32 ใช้การเชื่อมต่อแบบ Polling จาก Render; ยังไม่ต้องใส่ Local URL");
 
     return;
   }
@@ -1241,6 +1311,199 @@ window.addEventListener(
     );
   }
 );
+
+
+/* =========================================================
+   ROLE / LOGIN
+   ========================================================= */
+let fireWatchRole = "public";
+
+function roleLabel(role){
+  return role === "officer"
+    ? "🚒 เจ้าหน้าที่"
+    : role === "demo"
+      ? "🧪 โหมดทดลอง"
+      : "👤 ประชาชนทั่วไป";
+}
+
+function selectLoginRole(role){
+  fireWatchRole = role;
+  ["public","officer","demo"].forEach(r=>{
+    const btn = document.getElementById("mode" + r[0].toUpperCase() + r.slice(1));
+    if(btn) btn.classList.toggle("active", r === role);
+  });
+
+  document.getElementById("credentialBox").style.display =
+    role === "public" ? "none" : "block";
+  document.getElementById("loginMessage").textContent =
+    role === "public"
+      ? "ประชาชนสามารถเข้าสู่ระบบได้ทันทีเพื่อดูข้อมูล"
+      : role === "officer"
+        ? "สำหรับเจ้าหน้าที่ที่ได้รับบัญชีจากผู้ดูแลระบบ"
+        : "สำหรับการสาธิต/การแข่งขันเท่านั้น";
+}
+
+async function loginFireWatch(){
+  const username = document.getElementById("loginUsername").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const box = document.getElementById("loginMessage");
+
+  box.textContent = "กำลังเข้าสู่ระบบ...";
+
+  try{
+    const response = await fetch("/api/login",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        role:fireWatchRole,
+        username,
+        password
+      })
+    });
+
+    const data = await response.json();
+    if(!response.ok || !data.ok){
+      throw new Error(data.error || "เข้าสู่ระบบไม่สำเร็จ");
+    }
+
+    applyRole(data.role);
+    document.getElementById("loginOverlay").style.display = "none";
+    document.getElementById("roleBar").style.display = "flex";
+
+    if(data.role === "demo"){
+      log("เข้าสู่โหมดทดลองสำหรับการแข่งขัน");
+    }else if(data.role === "officer"){
+      log("เข้าสู่ระบบในสิทธิ์เจ้าหน้าที่");
+    }else{
+      log("เข้าสู่ระบบในสิทธิ์ประชาชนทั่วไป");
+    }
+  }catch(error){
+    box.textContent = "❌ " + error.message;
+  }
+}
+
+function applyRole(role){
+  fireWatchRole = role;
+  document.body.classList.remove("role-public","role-officer","role-demo","app-locked");
+  document.body.classList.add("role-" + role);
+  document.getElementById("rolePill").textContent = roleLabel(role);
+  document.getElementById("rolePill").className =
+    "role-pill" + (role === "demo" ? " demo" : role === "officer" ? " officer" : "");
+  document.getElementById("roleName").textContent =
+    role === "demo"
+      ? "ข้อมูลจำลองสำหรับการแข่งขัน"
+      : role === "officer"
+        ? "สามารถนำทางไปยังจุดเกิดเหตุได้"
+        : "ดูข้อมูลจุดความร้อนและสถานะแจ้งเตือน";
+}
+
+async function checkExistingLogin(){
+  try{
+    const response = await fetch("/api/me");
+    const data = await response.json();
+    if(data.loggedIn){
+      applyRole(data.role);
+      document.getElementById("loginOverlay").style.display = "none";
+      document.getElementById("roleBar").style.display = "flex";
+    }else{
+      document.body.classList.add("app-locked");
+    }
+  }catch(error){
+    document.body.classList.add("app-locked");
+    document.getElementById("loginMessage").textContent =
+      "เชื่อมต่อระบบเข้าสู่ระบบไม่ได้: " + error.message;
+  }
+}
+
+async function logoutFireWatch(){
+  await fetch("/api/logout",{method:"POST"});
+  location.reload();
+}
+
+async function testLineFromWeb(){
+  const box = document.getElementById("lineStatus");
+  box.textContent = "กำลังส่ง...";
+  try{
+    const response = await fetch("/api/line/test",{method:"POST"});
+    const data = await response.json();
+    if(!response.ok || !data.ok){
+      throw new Error(data.reason || data.error || "ส่ง LINE ไม่สำเร็จ");
+    }
+    box.textContent = "✅ ส่งข้อความทดสอบแล้ว";
+  }catch(error){
+    box.textContent = "❌ " + error.message;
+  }
+}
+
+/* =========================================================
+   OFFICER NAVIGATION ON FIRE POPUPS
+   ========================================================= */
+function addOfficerNavigationToPopup(popup){
+  if(fireWatchRole !== "officer") return;
+
+  const latlng = popup.getLatLng();
+  if(!latlng) return;
+
+  const lat = Number(latlng.lat).toFixed(6);
+  const lng = Number(latlng.lng).toFixed(6);
+  const url =
+    "https://www.google.com/maps/dir/?api=1&destination=" +
+    encodeURIComponent(lat + "," + lng);
+
+  const current = popup.getContent();
+  if(typeof current !== "string" || current.includes("นำทาง")) return;
+
+  popup.setContent(
+    current +
+    '<br><br><a href="' + url + '" target="_blank" rel="noopener" ' +
+    'style="display:inline-block;padding:9px 12px;background:#174d35;color:#fff;' +
+    'border-radius:8px;text-decoration:none;font-weight:700">🧭 นำทางไปจุดเกิดเหตุ</a>'
+  );
+}
+
+/* =========================================================
+   DEMO -> LINE
+   ========================================================= */
+const originalDemoFire = window.demoFire;
+window.demoFire = async function(){
+  if(fireWatchRole !== "demo" && fireWatchRole !== "officer"){
+    alert("ต้องเข้าสู่โหมดทดลองหรือเจ้าหน้าที่ก่อน");
+    return;
+  }
+
+  if(typeof originalDemoFire === "function"){
+    originalDemoFire();
+  }
+
+  try{
+    const response = await fetch("/api/demo/alert",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        lat: boardLat,
+        lng: boardLng,
+        distance_km: CONFIG.demoDistanceKm
+      })
+    });
+
+    if(response.ok){
+      log("ส่ง DEMO แจ้งเตือน LINE แล้ว");
+    }else{
+      log("ส่ง DEMO LINE ไม่สำเร็จ");
+    }
+  }catch(error){
+    log("DEMO LINE error: " + error.message);
+  }
+};
+
+/* Add navigation after Leaflet opens a popup. */
+document.addEventListener("DOMContentLoaded",()=>{
+  checkExistingLogin();
+  if(map){
+    map.on("popupopen",event=>addOfficerNavigationToPopup(event.popup));
+  }
+});
+
 </script>
 
 </body>
