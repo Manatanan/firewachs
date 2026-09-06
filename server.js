@@ -78,12 +78,10 @@ app.use(
 
 // ============================================================
 // หน้าแรก
-// ============================================================
+app.use(express.static(__dirname));
 
 app.get("/", (req, res) => {
-  res.type("text/plain").send(
-    "Wildfire Backend Proxy is running"
-  );
+  res.sendFile(__dirname + "/index.html");
 });
 
 // ============================================================
