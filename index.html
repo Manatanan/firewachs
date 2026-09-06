@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบแจ้งเตือนไฟป่า | GISTDA + ESP32</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,"Noto Sans Thai",sans-serif;
+  background:#f4f7f5;
+  color:#17221b;
+}
+header{
+  background:#174d35;
+  color:#fff;
+  padding:18px 22px;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+}
+header h1{margin:0;font-size:25px}
+header p{margin:6px 0 0;font-size:13px;opacity:.9}
+
+.container{
+  max-width:1250px;
+  margin:18px auto;
+  padding:0 12px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:360px 1fr;
+  gap:16px;
+}
+.card{
+  background:#fff;
+  border-radius:14px;
+  padding:16px;
+  box-shadow:0 2px 10px rgba(0,0,0,.08);
+  margin-bottom:16px;
+}
+.card h2{
+  font-size:18px;
+  margin:0 0 12px;
+}
+label{
+  display:block;
+  font-weight:700;
+  margin:10px 0 5px;
+  font-size:13px;
+}
+input,select,button{
+  width:100%;
+  padding:10px;
+  border:1px solid #cbd5ce;
+  border-radius:8px;
+  font-size:14px;
+}
+button{
+  cursor:pointer;
+  font-weight:700;
+  border:0;
+  background:#1f7a4d;
+  color:#fff;
+  margin-top:8px;
+}
+button:hover{filter:brightness(.95)}
+button.secondary{background:#64746b}
+button.danger{background:#b42318}
+button.demo{background:#c77700}
+
+.row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.status{
+  padding:15px;
+  border-radius:12px;
+  text-align:center;
+  font-size:20px;
+  font-weight:800;
+  margin-bottom:10px;
+}
+.status.safe{background:#dff5e7;color:#146c36}
+.status.alert{background:#ffe0df;color:#a80000}
+
+.kpi{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+}
+.kpi div{
+  background:#f1f5f2;
+  border-radius:10px;
+  padding:10px;
+  text-align:center;
+}
+.kpi b{display:block;font-size:20px;margin-top:3px}
+
+#map{
+  height:520px;
+  width:100%;
+  border-radius:12px;
+}
+.map-card{padding-bottom:10px}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+th,td{
+  padding:8px;
+  border-bottom:1px solid #e5e9e6;
+  text-align:left;
+}
+th{background:#f7faf8}
+
+.badge{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:20px;
+  font-size:11px;
+  font-weight:700;
+}
+.badge.safe{background:#e4f7eb;color:#165a38}
+.badge.alert{background:#ffe1df;color:#a80000}
+
+pre{
+  background:#111;
+  color:#e8f5eb;
+  padding:12px;
+  border-radius:8px;
+  overflow:auto;
+  max-height:240px;
+  font-size:12px;
+}
+.note{
+  background:#fff5d9;
+  border-left:4px solid #e0a000;
+  padding:10px;
+  border-radius:6px;
+  font-size:12px;
+  line-height:1.5;
+}
+.small{font-size:12px;color:#66736b;line-height:1.5}
+
+.legend{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-top:10px;
+  font-size:13px;
+}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{
+  width:12px;height:12px;border-radius:50%;display:inline-block;
+}
+.green{background:#1f9d55}
+.red{background:#e53935}
+.blue{background:#2878d7}
+
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+  #map{height:420px}
+}
+
+html,body{max-width:100%;overflow-x:hidden;}
+body{width:100%;}
+.container{width:100%;max-width:1250px;min-width:0;}
+.grid{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:16px;width:100%;min-width:0;}
+.grid>div{min-width:0;}
+.card{min-width:0;max-width:100%;overflow:hidden;}
+input,select,button{max-width:100%;min-width:0;}
+#map{max-width:100%;overflow:hidden;}
+.leaflet-container{width:100%!important;max-width:100%;height:100%;overflow:hidden;}
+.table-wrap{width:100%;max-width:100%;overflow-x:auto;}
+.table-wrap table{width:100%;min-width:650px;}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>🔥 ระบบแจ้งเตือนไฟป่า</h1>
+  <p>GISTDA VIIRS → เว็บไซต์ → ESP32 → Pilot Lamp / Buzzer / LCD</p>
+</header>
+
+<div class="container">
+
+<div class="grid">
+
+<!-- ================= LEFT ================= -->
+<div>
+
+  <div class="card">
+    <h2>🟢 สถานะระบบ</h2>
+
+    <div id="statusBox" class="status safe">
+      🟢 ไม่พบไฟป่าในรัศมีที่กำหนด
+    </div>
+
+    <div class="kpi">
+      <div>
+        จุดไฟทั้งหมด
+        <b id="fireCount">0</b>
+      </div>
+      <div>
+        ใกล้สุด
+        <b id="nearestDistance">-</b>
+      </div>
+      <div>
+        แหล่งข้อมูล
+        <b id="sourceText">-</b>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📍 ตำแหน่งบอร์ดและรัศมี</h2>
+
+    <div class="row">
+      <div>
+        <label>Latitude บอร์ด</label>
+        <input id="boardLat" type="number" step="0.000001" value="19.9105">
+      </div>
+      <div>
+        <label>Longitude บอร์ด</label>
+        <input id="boardLng" type="number" step="0.000001" value="99.8406">
+      </div>
+    </div>
+
+    <label>รัศมีแจ้งเตือน (กม.)</label>
+    <input id="radiusKm" type="number" min="0.1" step="0.1" value="20">
+
+    <button onclick="applyLocation()">ใช้ค่าตำแหน่งนี้</button>
+  </div>
+
+  <div class="card">
+    <h2>📡 GISTDA API</h2>
+
+    <label>API URL</label>
+    <input id="apiUrl"
+      value="https://api-gateway.gistda.or.th/api/2.0/resources/features/viirs/1day">
+
+    <label>API Key</label>
+    <input id="apiKey" type="password" placeholder="วาง API Key ของคุณที่นี่">
+
+    <label>ประเทศ (ct_tn)</label>
+    <input id="country" value="ราชอาณาจักรไทย">
+
+    <div class="row">
+      <div>
+        <label>Limit</label>
+        <input id="limit" type="number" value="1000">
+      </div>
+      <div>
+        <label>Offset</label>
+        <input id="offset" type="number" value="0">
+      </div>
+    </div>
+
+    <button onclick="loadGistdaData()">📥 ดึงข้อมูล GISTDA ตอนนี้</button>
+
+    <p class="small">
+      ระบบรองรับ GeoJSON แบบ features → geometry.coordinates → properties
+    </p>
+
+    <div class="note">
+      ⚠️ อย่าใส่ API Key จริงลงในไฟล์ที่เผยแพร่สาธารณะบน GitHub
+      เพราะคนอื่นสามารถเปิดดู Source Code ได้
+      สำหรับใช้งานจริงควรทำ Backend/Proxy เก็บ Key ไว้ฝั่งเซิร์ฟเวอร์
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🧪 โหมดสาธิตสำหรับกรรมการ</h2>
+
+    <button class="demo" onclick="demoFire()">
+      🔥 จำลองพบไฟป่าใกล้บอร์ด
+    </button>
+
+    <button class="secondary" onclick="clearDemo()">
+      🟢 ยกเลิกการจำลอง / กลับสู่ปกติ
+    </button>
+
+    <p class="small">
+      ปุ่มนี้ใช้จำลองสถานการณ์โดยไม่ต้องรอข้อมูลดาวเทียม
+      เหมาะสำหรับสาธิตการทำงานของระบบ ESP32
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>🔌 เชื่อมต่อ ESP32</h2>
+
+    <label>ESP32 URL</label>
+    <input id="esp32Url" value="http://192.168.1.100">
+
+    <button onclick="sendCurrentToEsp32()">
+      📤 ส่งสถานะปัจจุบันไป ESP32
+    </button>
+
+    <button class="secondary" onclick="testEsp32()">
+      🔎 ทดสอบการเชื่อมต่อ ESP32
+    </button>
+
+    <p class="small">
+      ESP32 ต้องอยู่ในเครือข่ายเดียวกับคอมพิวเตอร์/โทรศัพท์
+      และต้องเปิด Web Server พร้อม Endpoint /api/alert
+    </p>
+  </div>
+
+</div>
+
+<!-- ================= RIGHT ================= -->
+<div>
+
+  <div class="card map-card">
+    <h2>🗺️ แผนที่จุดความร้อน</h2>
+    <div id="map"></div>
+
+    <div class="legend">
+      <span><i class="dot blue"></i> ตำแหน่ง ESP32</span>
+      <span><i class="dot red"></i> จุดความร้อน</span>
+      <span><i class="dot green"></i> จุดนอกพื้นที่แจ้งเตือน</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔥 รายการจุดไฟป่า</h2>
+
+    <div class="table-wrap"><table>
+      <thead>
+        <tr>
+          <th>สถานะ</th>
+          <th>ตำแหน่ง</th>
+          <th>ระยะ (กม.)</th>
+          <th>วันที่</th>
+          <th>เวลา</th>
+          <th>จังหวัด</th>
+          <th>FRP</th>
+        </tr>
+      </thead>
+
+      <tbody id="fireTable">
+        <tr>
+          <td colspan="7">ยังไม่มีข้อมูล</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h2>📤 Payload ล่าสุดที่ส่งให้ ESP32</h2>
+    <pre id="payloadBox">{}</pre>
+  </div>
+
+  <div class="card">
+    <h2>ℹ️ บันทึกระบบ</h2>
+    <pre id="logBox">พร้อมทำงาน</pre>
+  </div>
+
+</div>
+
+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+
+<script>
+/* =========================================================
+   CONFIG
+   ========================================================= */
+
+const CONFIG = {
+  mapZoom: 9,
+  demoDistanceKm: 2,
+  defaultBoardLat: 19.9105,
+  defaultBoardLng: 99.8406,
+  // ใส่ URL ของ Backend Proxy ที่ deploy จริง เช่น Render/Railway/Fly.io
+  // ถ้าเปิดหน้าเว็บจาก Backend เดียวกัน ให้ใช้ค่าว่างได้
+  backendUrl: ""
+};
+
+/* =========================================================
+   GLOBAL VARIABLES
+   ========================================================= */
+
+let map;
+let boardMarker;
+let radiusCircle;
+
+let fireLayer = L.layerGroup();
+
+let boardLat = CONFIG.defaultBoardLat;
+let boardLng = CONFIG.defaultBoardLng;
+let radiusKm = 20;
+
+let fireEvents = [];
+let currentAlert = false;
+let currentSource = "NONE";
+
+/* =========================================================
+   MAP INITIALIZATION
+   ========================================================= */
+
+function initMap(){
+
+  map = L.map("map").setView(
+    [boardLat, boardLng],
+    CONFIG.mapZoom
+  );
+
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      maxZoom:19,
+      attribution:"Tiles © Esri"
+    }
+  ).addTo(map);
+
+  fireLayer.addTo(map);
+
+  updateBoardOnMap();
+}
+
+/* =========================================================
+   BOARD LOCATION
+   ========================================================= */
+
+function updateBoardOnMap(){
+
+  if(!map) return;
+
+  if(boardMarker){
+    map.removeLayer(boardMarker);
+  }
+
+  if(radiusCircle){
+    map.removeLayer(radiusCircle);
+  }
+
+  boardMarker = L.marker([boardLat,boardLng])
+    .addTo(map)
+    .bindPopup(
+      "<b>📡 ESP32</b><br>" +
+      "Lat: " + boardLat.toFixed(6) + "<br>" +
+      "Lng: " + boardLng.toFixed(6)
+    );
+
+  radiusCircle = L.circle(
+    [boardLat,boardLng],
+    {
+      radius: radiusKm * 1000,
+      color:"#e53935",
+      fillColor:"#e53935",
+      fillOpacity:0.08
+    }
+  ).addTo(map);
+}
+
+function applyLocation(){
+
+  boardLat = Number(document.getElementById("boardLat").value);
+  boardLng = Number(document.getElementById("boardLng").value);
+  radiusKm = Number(document.getElementById("radiusKm").value);
+
+  if(
+    !Number.isFinite(boardLat) ||
+    !Number.isFinite(boardLng) ||
+    !Number.isFinite(radiusKm)
+  ){
+    alert("กรุณาตรวจสอบค่า Latitude / Longitude / รัศมี");
+    return;
+  }
+
+  updateBoardOnMap();
+  evaluateAlert();
+
+  log("อัปเดตตำแหน่งบอร์ดและรัศมีแล้ว");
+}
+
+/* =========================================================
+   HAVERSINE DISTANCE
+   ========================================================= */
+
+function haversineKm(lat1,lon1,lat2,lon2){
+
+  const R = 6371;
+
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
+
+  const a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* =========================================================
+   GISTDA DATA NORMALIZATION
+   ========================================================= */
+
+function normalizeGistdaData(data){
+
+  const features =
+    Array.isArray(data?.features)
+      ? data.features
+      : [];
+
+  return features
+    .map((feature,index)=>{
+
+      const coords =
+        feature?.geometry?.coordinates;
+
+      const props =
+        feature?.properties || {};
+
+      if(
+        !Array.isArray(coords) ||
+        coords.length < 2
+      ){
+        return null;
+      }
+
+      const lng = Number(coords[0]);
+      const lat = Number(coords[1]);
+
+      if(
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng)
+      ){
+        return null;
+      }
+
+      return {
+        id:
+          feature.id ||
+          props._id ||
+          String(index),
+
+        lat,
+        lng,
+
+        province:
+          props.changwat ||
+          props.province ||
+          "-",
+
+        district:
+          props.amphoe_t ||
+          props.amphoe ||
+          "-",
+
+        subdistrict:
+          props.tambon_t ||
+          props.tambon ||
+          "-",
+
+        date:
+          props.acq_date ||
+          "-",
+
+        time:
+          props.acq_time ||
+          "-",
+
+        frp:
+          props.frp ??
+          props.FRP ??
+          "-",
+
+        brightness:
+          props.bright_ti4 ??
+          "-",
+
+        satellite:
+          props.satellite ||
+          "-",
+
+        source:"GISTDA_VIIRS"
+      };
+    })
+    .filter(Boolean);
+}
+
+/* =========================================================
+   GET GISTDA DATA
+   ========================================================= */
+
+async function loadGistdaData(){
+
+  const apiUrl =
+    document.getElementById("apiUrl").value.trim();
+
+  const apiKey =
+    document.getElementById("apiKey").value.trim();
+
+  const country =
+    document.getElementById("country").value.trim();
+
+  const limit =
+    document.getElementById("limit").value || 1000;
+
+  const offset =
+    document.getElementById("offset").value || 0;
+
+  if(!apiUrl){
+    alert("กรุณาใส่ API URL");
+    return;
+  }
+
+  log("กำลังดึงข้อมูล GISTDA ผ่าน Backend Proxy...");
+
+  try{
+
+    const base = "http://localhost:3000";
+    const proxyUrl = base + "/api/gistda";
+
+    const query =
+      "?limit=" + encodeURIComponent(limit) +
+      "&offset=" + encodeURIComponent(offset) +
+      "&ct_tn=" + encodeURIComponent(country) +
+      "&apiUrl=" + encodeURIComponent(apiUrl);
+
+    const response =
+      await fetch(proxyUrl + query,{
+        method:"GET",
+        headers:{
+          "Accept":"application/geo+json, application/json"
+        }
+      });
+
+    if(!response.ok){
+      throw new Error(
+        "HTTP " +
+        response.status +
+        " " +
+        response.statusText
+      );
+    }
+
+    const data =
+      await response.json();
+
+    const events =
+      normalizeGistdaData(data);
+
+    fireEvents = events;
+
+    currentSource = "GISTDA";
+
+    renderFires();
+
+    evaluateAlert();
+
+    log(
+      "ดึงข้อมูลสำเร็จ: " +
+      events.length +
+      " จุด"
+    );
+
+  }catch(error){
+
+    console.error(error);
+
+    log(
+      "ดึงข้อมูล GISTDA ไม่สำเร็จ: " +
+      error.message
+    );
+
+    alert(
+      "ดึงข้อมูล GISTDA ไม่สำเร็จ\n\n" +
+      error.message +
+      "\n\n" +
+      "ตรวจสอบว่า Backend Proxy ทำงานอยู่และตั้ง GISTDA_API_KEY แล้ว"
+    );
+  }
+}
+
+/* =========================================================
+   RENDER FIRE MARKERS
+   ========================================================= */
+
+function renderFires(){
+
+  fireLayer.clearLayers();
+
+  const table =
+    document.getElementById("fireTable");
+
+  table.innerHTML = "";
+
+  if(!fireEvents.length){
+
+    table.innerHTML =
+      '<tr><td colspan="7">ไม่พบข้อมูลจุดความร้อน</td></tr>';
+
+    document.getElementById("fireCount").textContent = "0";
+    document.getElementById("nearestDistance").textContent = "-";
+
+    return;
+  }
+
+  let nearest = Infinity;
+
+  fireEvents.forEach((fire)=>{
+
+    fire.distance =
+      haversineKm(
+        boardLat,
+        boardLng,
+        fire.lat,
+        fire.lng
+      );
+
+    if(fire.distance < nearest){
+      nearest = fire.distance;
+    }
+
+    const inside =
+      fire.distance <= radiusKm;
+
+    const marker =
+      L.circleMarker(
+        [fire.lat,fire.lng],
+        {
+          radius:inside ? 9 : 6,
+          color:inside ? "#e53935" : "#1f9d55",
+          fillColor:inside ? "#e53935" : "#1f9d55",
+          fillOpacity:.85,
+          weight:2
+        }
+      );
+
+    marker.bindPopup(
+      "<b>🔥 จุดความร้อน</b><br>" +
+      "จังหวัด: " + escapeHtml(fire.province) + "<br>" +
+      "Lat: " + fire.lat.toFixed(6) + "<br>" +
+      "Lng: " + fire.lng.toFixed(6) + "<br>" +
+      "ระยะ: " + fire.distance.toFixed(2) + " กม.<br>" +
+      "วันที่: " + escapeHtml(fire.date) + "<br>" +
+      "เวลา: " + escapeHtml(fire.time)
+    );
+
+    marker.addTo(fireLayer);
+
+    const tr =
+      document.createElement("tr");
+
+    tr.innerHTML =
+      "<td>" +
+      (
+        inside
+          ? '<span class="badge alert">แจ้งเตือน</span>'
+          : '<span class="badge safe">ปกติ</span>'
+      ) +
+      "</td>" +
+
+      "<td>" +
+      fire.lat.toFixed(5) +
+      ", " +
+      fire.lng.toFixed(5) +
+      "</td>" +
+
+      "<td>" +
+      fire.distance.toFixed(2) +
+      "</td>" +
+
+      "<td>" +
+      escapeHtml(fire.date) +
+      "</td>" +
+
+      "<td>" +
+      escapeHtml(fire.time) +
+      "</td>" +
+
+      "<td>" +
+      escapeHtml(fire.province) +
+      "</td>" +
+
+      "<td>" +
+      escapeHtml(String(fire.frp)) +
+      "</td>";
+
+    table.appendChild(tr);
+  });
+
+  document.getElementById("fireCount").textContent =
+    fireEvents.length;
+
+  document.getElementById("nearestDistance").textContent =
+    Number.isFinite(nearest)
+      ? nearest.toFixed(2) + " กม."
+      : "-";
+}
+
+/* =========================================================
+   ALERT EVALUATION
+   ========================================================= */
+
+function evaluateAlert(){
+
+  if(!fireEvents.length){
+
+    setAlertState(
+      false,
+      "NONE"
+    );
+
+    return;
+  }
+
+  let nearestFire = null;
+
+  fireEvents.forEach((fire)=>{
+
+    fire.distance =
+      haversineKm(
+        boardLat,
+        boardLng,
+        fire.lat,
+        fire.lng
+      );
+
+    if(
+      fire.distance <= radiusKm &&
+      (
+        nearestFire === null ||
+        fire.distance < nearestFire.distance
+      )
+    ){
+      nearestFire = fire;
+    }
+  });
+
+  if(nearestFire){
+
+    setAlertState(
+      true,
+      currentSource || "GISTDA",
+      nearestFire
+    );
+
+  }else{
+
+    setAlertState(
+      false,
+      currentSource || "GISTDA"
+    );
+  }
+
+  renderFires();
+}
+
+/* =========================================================
+   SET ALERT STATE
+   ========================================================= */
+
+function setAlertState(
+  alertState,
+  source,
+  nearestFire=null
+){
+
+  currentAlert = alertState;
+  currentSource = source;
+
+  const box =
+    document.getElementById("statusBox");
+
+  if(alertState){
+
+    box.className = "status alert";
+
+    box.innerHTML =
+      "🔴 พบไฟป่าในรัศมี " +
+      radiusKm +
+      " กม.";
+
+  }else{
+
+    box.className = "status safe";
+
+    box.innerHTML =
+      "🟢 ไม่พบไฟป่าในรัศมีที่กำหนด";
+  }
+
+  document.getElementById("sourceText").textContent =
+    source === "GISTDA"
+      ? "GISTDA"
+      : source === "DEMO"
+        ? "DEMO"
+        : "-";
+
+  const payload =
+    createEsp32Payload(
+      alertState,
+      nearestFire
+    );
+
+  document.getElementById("payloadBox").textContent =
+    JSON.stringify(
+      payload,
+      null,
+      2
+    );
+}
+
+/* =========================================================
+   CREATE ESP32 PAYLOAD
+   ========================================================= */
+
+function createEsp32Payload(
+  fire,
+  nearestFire=null
+){
+
+  return {
+    fire:Boolean(fire),
+
+    distance_km:
+      nearestFire
+        ? Number(nearestFire.distance.toFixed(3))
+        : null,
+
+    lat:
+      nearestFire
+        ? nearestFire.lat
+        : null,
+
+    lng:
+      nearestFire
+        ? nearestFire.lng
+        : null,
+
+    source:
+      currentSource,
+
+    province:
+      nearestFire
+        ? nearestFire.province
+        : null,
+
+    date:
+      nearestFire
+        ? nearestFire.date
+        : null,
+
+    time:
+      nearestFire
+        ? nearestFire.time
+        : null,
+
+    radius_km:
+      radiusKm
+  };
+}
+
+/* =========================================================
+   SEND TO ESP32
+   ========================================================= */
+
+async function sendCurrentToEsp32(){
+
+  const esp32Url =
+    document.getElementById("esp32Url")
+      .value
+      .trim()
+      .replace(/\/$/,"");
+
+  if(!esp32Url){
+
+    alert("กรุณาใส่ ESP32 URL");
+
+    return;
+  }
+
+  let nearestFire = null;
+
+  fireEvents.forEach((fire)=>{
+
+    if(
+      fire.distance <= radiusKm &&
+      (
+        nearestFire === null ||
+        fire.distance < nearestFire.distance
+      )
+    ){
+      nearestFire = fire;
+    }
+  });
+
+  const payload =
+    createEsp32Payload(
+      currentAlert,
+      nearestFire
+    );
+
+  document.getElementById("payloadBox").textContent =
+    JSON.stringify(payload,null,2);
+
+  try{
+
+    const response =
+      await fetch(
+        esp32Url + "/api/alert",
+        {
+          method:"POST",
+
+          headers:{
+            "Content-Type":"application/json"
+          },
+
+          body:JSON.stringify(payload)
+        }
+      );
+
+    const text =
+      await response.text();
+
+    if(!response.ok){
+
+      throw new Error(
+        "HTTP " +
+        response.status +
+        " " +
+        text
+      );
+    }
+
+    log(
+      "ส่งสถานะไป ESP32 สำเร็จ"
+    );
+
+  }catch(error){
+
+    log(
+      "ส่งไป ESP32 ไม่สำเร็จ: " +
+      error.message
+    );
+
+    alert(
+      "เชื่อมต่อ ESP32 ไม่สำเร็จ\n\n" +
+      error.message +
+      "\n\n" +
+      "ตรวจสอบ IP และ Wi-Fi ของ ESP32"
+    );
+  }
+}
+
+/* =========================================================
+   TEST ESP32
+   ========================================================= */
+
+async function testEsp32(){
+
+  const esp32Url =
+    document.getElementById("esp32Url")
+      .value
+      .trim()
+      .replace(/\/$/,"");
+
+  if(!esp32Url){
+
+    alert("กรุณาใส่ ESP32 URL");
+
+    return;
+  }
+
+  try{
+
+    const response =
+      await fetch(
+        esp32Url + "/",
+        {
+          method:"GET"
+        }
+      );
+
+    const text =
+      await response.text();
+
+    log(
+      "ESP32 ตอบกลับ: " +
+      text
+    );
+
+    alert(
+      "เชื่อมต่อ ESP32 สำเร็จ"
+    );
+
+  }catch(error){
+
+    log(
+      "ทดสอบ ESP32 ไม่สำเร็จ: " +
+      error.message
+    );
+
+    alert(
+      "เชื่อมต่อ ESP32 ไม่สำเร็จ\n" +
+      error.message
+    );
+  }
+}
+
+/* =========================================================
+   DEMO FIRE
+   ========================================================= */
+
+function demoFire(){
+
+  const offsetLat = CONFIG.demoDistanceKm / 111.32;
+
+  const demoLat =
+    boardLat + offsetLat;
+
+  const demoLng = boardLng;
+
+  fireEvents = [
+    {
+      id:"DEMO-001",
+      lat:demoLat,
+      lng:demoLng,
+      province:"เชียงราย",
+      district:"เมืองเชียงราย",
+      subdistrict:"จำลอง",
+      date:new Date().toISOString().slice(0,10),
+      time:new Date().toTimeString().slice(0,5),
+      frp:"DEMO",
+      brightness:"DEMO",
+      satellite:"DEMO",
+      source:"DEMO"
+    }
+  ];
+
+  currentSource = "DEMO";
+
+  renderFires();
+  evaluateAlert();
+
+  log(
+    "เปิดโหมด DEMO: จำลองไฟป่าใกล้บอร์ด"
+  );
+
+  sendCurrentToEsp32();
+}
+
+/* =========================================================
+   CLEAR DEMO
+   ========================================================= */
+
+function clearDemo(){
+
+  fireEvents = [];
+
+  currentSource = "DEMO";
+
+  fireLayer.clearLayers();
+
+  renderFires();
+
+  setAlertState(
+    false,
+    "DEMO"
+  );
+
+  log(
+    "ยกเลิก DEMO และกลับสู่สถานะปกติ"
+  );
+
+  sendCurrentToEsp32();
+}
+
+/* =========================================================
+   LOG
+   ========================================================= */
+
+function log(message){
+
+  const box =
+    document.getElementById("logBox");
+
+  const time =
+    new Date().toLocaleTimeString("th-TH");
+
+  const old =
+    box.textContent
+      ? box.textContent
+      : "";
+
+  box.textContent =
+    "[" + time + "] " +
+    message +
+    "\n" +
+    old;
+
+  console.log(message);
+}
+
+/* =========================================================
+   HTML ESCAPE
+   ========================================================= */
+
+function escapeHtml(value){
+
+  return String(value ?? "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+/* =========================================================
+   START
+   ========================================================= */
+
+window.addEventListener(
+  "DOMContentLoaded",
+  ()=>{
+    initMap();
+  setTimeout(()=>{ if(map) map.invalidateSize(); },300);
+
+    setAlertState(
+      false,
+      "NONE"
+    );
+
+    log(
+      "ระบบพร้อมใช้งาน"
+    );
+  }
+);
+</script>
+
+</body>
+</html>
