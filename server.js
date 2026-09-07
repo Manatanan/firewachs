@@ -419,76 +419,63 @@ app.get(
 // GISTDA REQUEST
 // =====================================================
 
-function requestGistda(
+async function requestGistda(
   url,
   limit,
   offset,
   country
 ) {
-  return new Promise(
-    (resolve, reject) => {
-      const target =
-        new URL(url);
+  const target =
+    new URL(url);
 
-      target.search =
-        new URLSearchParams({
-          limit: String(limit),
-          offset: String(offset),
-          ct_tn: String(country)
-        }).toString();
+  target.search =
+    new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      ct_tn: String(country)
+    }).toString();
 
-      execFile(
-        "curl.exe",
-        [
-          "-sS",
-          "--fail-with-body",
-          "-H",
-          `API-Key: ${GISTDA_API_KEY}`,
-          "-H",
-          "Accept: application/json",
-          target.toString()
-        ],
-        {
-          windowsHide: true,
-          maxBuffer:
-            10 * 1024 * 1024
-        },
-        (
-          error,
-          stdout,
-          stderr
-        ) => {
-          if (error) {
-            return reject(
-              new Error(
-                stderr ||
-                error.message ||
-                "GISTDA request failed"
-              )
-            );
-          }
+  const response =
+    await fetch(
+      target.toString(),
+      {
+        method: "GET",
 
-          try {
-            const json =
-              JSON.parse(stdout);
+        headers: {
+          "API-Key":
+            GISTDA_API_KEY,
 
-            resolve({
-              json,
-              url:
-                target.toString()
-            });
-
-          } catch {
-            reject(
-              new Error(
-                "GISTDA returned invalid JSON"
-              )
-            );
-          }
+          "Accept":
+            "application/json"
         }
-      );
-    }
-  );
+      }
+    );
+
+  const text =
+    await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `GISTDA HTTP ${response.status}: ${text.slice(0, 500)}`
+    );
+  }
+
+  try {
+    const json =
+      JSON.parse(text);
+
+    return {
+      json,
+
+      url:
+        target.toString()
+    };
+
+  } catch {
+    throw new Error(
+      "GISTDA returned invalid JSON"
+    );
+  }
 }
 
 // =====================================================
