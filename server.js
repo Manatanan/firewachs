@@ -419,65 +419,121 @@ app.get(
 // GISTDA REQUEST
 // =====================================================
 
-async function requestGistda(
+
+function requestGistda(
   url,
   limit,
   offset,
   country
 ) {
-  const target =
-    new URL(url);
+  return new Promise(
+    async (resolve, reject) => {
 
-  target.search =
-    new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-      ct_tn: String(country)
-    }).toString();
+      const target =
+        new URL(url);
 
-  const response =
-    await fetch(
-      target.toString(),
-      {
-        method: "GET",
+      target.search =
+        new URLSearchParams({
+          limit: String(limit),
+          offset: String(offset),
+          ct_tn: String(country)
+        }).toString();
 
-        headers: {
-          "API-Key":
-            GISTDA_API_KEY,
+      let response;
 
-          "Accept":
-            "application/json"
-        }
+      try {
+
+        console.log(
+          "GISTDA REQUEST:",
+          target.toString()
+        );
+
+        response =
+          await fetch(
+            target.toString(),
+            {
+              method: "GET",
+
+              headers: {
+                "API-Key":
+                  GISTDA_API_KEY,
+
+                "Accept":
+                  "application/json"
+              }
+            }
+          );
+
+      } catch (error) {
+
+        console.error(
+          "GISTDA FETCH ERROR:",
+          error
+        );
+
+        console.error(
+          "GISTDA FETCH CAUSE:",
+          error?.cause
+        );
+
+        return reject(error);
       }
-    );
 
-  const text =
-    await response.text();
+      const text =
+        await response.text();
 
-  if (!response.ok) {
-    throw new Error(
-      `GISTDA HTTP ${response.status}: ${text.slice(0, 500)}`
-    );
-  }
+      console.log(
+        "GISTDA HTTP STATUS:",
+        response.status
+      );
 
-  try {
-    const json =
-      JSON.parse(text);
+      if (!response.ok) {
 
-    return {
-      json,
+        console.error(
+          "GISTDA RESPONSE:",
+          text.slice(0, 500)
+        );
 
-      url:
-        target.toString()
-    };
+        return reject(
+          new Error(
+            `GISTDA HTTP ${response.status}: ${text.slice(0, 500)}`
+          )
+        );
+      }
 
-  } catch {
-    throw new Error(
-      "GISTDA returned invalid JSON"
-    );
-  }
+      try {
+
+        const json =
+          JSON.parse(text);
+
+        resolve({
+          json,
+
+          url:
+            target.toString()
+        });
+
+      } catch (error) {
+
+        console.error(
+          "GISTDA JSON ERROR:",
+          error
+        );
+
+        console.error(
+          "GISTDA RAW RESPONSE:",
+          text.slice(0, 500)
+        );
+
+        reject(
+          new Error(
+            "GISTDA returned invalid JSON"
+          )
+        );
+      }
+    }
+  );
 }
-
 // =====================================================
 // GISTDA API PROXY
 // =====================================================
@@ -1229,19 +1285,19 @@ app.get(
       );
 
     } catch (error) {
-      console.error(
-        "ESP32 status error:",
-        error.message
-      );
+  console.error(
+    "ESP32 status error:",
+    error.message
+  );
 
-      return res.status(502).json({
-        ok: false,
-        error:
-          "Cannot get GISTDA data"
-      });
-    }
-  }
-);
+  return res.status(502).json({
+    ok: false,
+    error:
+      "Cannot get GISTDA data",
+    detail:
+      error.message
+  });
+}
 
 // =====================================================
 // FIND RESPONSIBLE BOARD FROM FIRE
