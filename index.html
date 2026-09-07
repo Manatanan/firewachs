@@ -1,0 +1,3074 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบแจ้งเตือนไฟป่า | GISTDA + ESP32</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, "Noto Sans Thai", sans-serif;
+      background: #f4f7f5;
+      color: #17221b;
+    }
+
+    header {
+      background: #174d35;
+      color: #fff;
+      padding: 18px 22px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 25px;
+    }
+
+    header p {
+      margin: 6px 0 0;
+      font-size: 13px;
+      opacity: .9;
+    }
+
+    .container {
+      max-width: 1250px;
+      margin: 18px auto;
+      padding: 0 12px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0,360px) minmax(0,1fr);
+      gap: 16px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .grid > div {
+      min-width: 0;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      margin-bottom: 16px;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin: 0 0 12px;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin: 10px 0 5px;
+      font-size: 13px;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid #cbd5ce;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 700;
+      border: 0;
+      background: #1f7a4d;
+      color: #fff;
+      margin-top: 8px;
+    }
+
+    button:hover {
+      filter: brightness(.95);
+    }
+
+    button.secondary {
+      background: #64746b;
+    }
+
+    button.danger {
+      background: #b42318;
+    }
+
+    button.demo {
+      background: #c77700;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .status {
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .status.safe {
+      background: #dff5e7;
+      color: #146c36;
+    }
+
+    .status.alert {
+      background: #ffe0df;
+      color: #a80000;
+    }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 8px;
+    }
+
+    .kpi div {
+      background: #f1f5f2;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .kpi b {
+      display: block;
+      font-size: 20px;
+      margin-top: 3px;
+    }
+
+    #map {
+      height: 520px;
+      width: 100%;
+      max-width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .map-card {
+      padding-bottom: 10px;
+    }
+
+    .leaflet-container {
+      width: 100% !important;
+      max-width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #e5e9e6;
+      text-align: left;
+    }
+
+    th {
+      background: #f7faf8;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge.safe {
+      background: #e4f7eb;
+      color: #165a38;
+    }
+
+    .badge.alert {
+      background: #ffe1df;
+      color: #a80000;
+    }
+
+    pre {
+      background: #111;
+      color: #e8f5eb;
+      padding: 12px;
+      border-radius: 8px;
+      overflow: auto;
+      max-height: 240px;
+      font-size: 12px;
+    }
+
+    .note {
+      background: #fff5d9;
+      border-left: 4px solid #e0a000;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #66736b;
+      line-height: 1.5;
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .green {
+      background: #1f9d55;
+    }
+
+    .red {
+      background: #e53935;
+    }
+
+    .blue {
+      background: #2878d7;
+    }
+
+    .table-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    .table-wrap table {
+      width: 100%;
+      min-width: 650px;
+    }
+
+    html,
+    body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    /* =========================================================
+       LOGIN / ROLE UI
+       ========================================================= */
+
+    body.app-locked .container {
+      display: none;
+    }
+
+    #loginOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,35,25,.72);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    #loginCard {
+      width: min(460px,100%);
+      background: #fff;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+
+    #loginCard h2 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .mode-btn {
+      margin: 0;
+      background: #eef3ef;
+      color: #174d35;
+      border: 2px solid transparent;
+    }
+
+    .mode-btn.active {
+      background: #174d35;
+      color: #fff;
+      border-color: #174d35;
+    }
+
+    #roleBar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #fff;
+      border-bottom: 1px solid #dfe7e1;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+
+    #roleBar button {
+      width: auto;
+      margin: 0;
+      padding: 7px 12px;
+    }
+
+    .role-pill {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #e8f3eb;
+      font-weight: 700;
+      color: #174d35;
+    }
+
+    .role-pill.demo {
+      background: #fff0d6;
+      color: #9a5a00;
+    }
+
+    .role-pill.officer {
+      background: #e5efff;
+      color: #174b8a;
+    }
+
+    .officer-only,
+    .demo-only {
+      display: none !important;
+    }
+
+    body.role-officer .officer-only {
+      display: block !important;
+    }
+
+    body.role-demo .demo-only {
+      display: block !important;
+    }
+
+    body.role-demo .officer-only {
+      display: block !important;
+    }
+
+    .login-note {
+      font-size: 12px;
+      color: #66736b;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+
+    /* =========================================================
+       DEMO COUNTDOWN
+       ========================================================= */
+
+    #demoCountdown {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,35,25,.72);
+      z-index: 100000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .countdown-box {
+      width: min(430px,100%);
+      background: #fff;
+      border-radius: 18px;
+      padding: 28px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+
+    .countdown-number {
+      font-size: 72px;
+      font-weight: 900;
+      color: #174d35;
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+
+    .countdown-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #17221b;
+    }
+
+    .countdown-text {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #66736b;
+      line-height: 1.6;
+    }
+
+    .demo-status {
+      border-left: 4px solid #c77700;
+    }
+
+    .area-line {
+      line-height: 1.5;
+    }
+
+    .nav-button {
+      display: inline-block;
+      padding: 9px 12px;
+      background: #174d35;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    @media(max-width:900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      #map {
+        height: 420px;
+      }
+    }
+
+    @media(max-width:600px) {
+      header h1 {
+        font-size: 21px;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+      }
+
+      .kpi {
+        grid-template-columns: 1fr;
+      }
+
+      #roleBar {
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+
+<body class="app-locked">
+
+<header>
+  <h1>🔥 ระบบแจ้งเตือนไฟป่า</h1>
+  <p>
+    GISTDA VIIRS → เว็บไซต์ → ESP32 → Pilot Lamp / Buzzer / LCD
+  </p>
+</header>
+
+<div id="roleBar" style="display:none">
+  <div>
+    <span id="rolePill" class="role-pill">
+      👤 ประชาชนทั่วไป
+    </span>
+    <span id="roleName">
+      เข้าสู่ระบบแล้ว
+    </span>
+  </div>
+
+  <button
+    class="secondary"
+    onclick="logoutFireWatch()"
+  >
+    ออกจากระบบ
+  </button>
+</div>
+
+<div id="loginOverlay">
+  <div id="loginCard">
+    <h2>🔥 FIRE WATCH</h2>
+
+    <div class="small">
+      เข้าสู่ระบบเพื่อเลือกสิทธิ์การใช้งาน
+    </div>
+
+    <div class="mode-grid">
+      <button
+        id="modePublic"
+        class="mode-btn active"
+        onclick="selectLoginRole('public')"
+      >
+        👤<br>
+        ประชาชน
+      </button>
+
+      <button
+        id="modeOfficer"
+        class="mode-btn"
+        onclick="selectLoginRole('officer')"
+      >
+        🚒<br>
+        เจ้าหน้าที่
+      </button>
+
+      <button
+        id="modeDemo"
+        class="mode-btn"
+        onclick="selectLoginRole('demo')"
+      >
+        🧪<br>
+        ทดลอง
+      </button>
+    </div>
+
+    <div id="credentialBox" style="display:none">
+      <label>ชื่อผู้ใช้</label>
+      <input
+        id="loginUsername"
+        autocomplete="username"
+        placeholder="Username"
+      >
+
+      <label>รหัสผ่าน</label>
+      <input
+        id="loginPassword"
+        type="password"
+        autocomplete="current-password"
+        placeholder="Password"
+      >
+    </div>
+
+    <button onclick="loginFireWatch()">
+      เข้าสู่ระบบ
+    </button>
+
+    <div id="loginMessage" class="login-note">
+      ประชาชนสามารถเข้าสู่ระบบได้ทันทีเพื่อดูข้อมูล
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     DEMO COUNTDOWN
+     ========================================================= -->
+
+<div id="demoCountdown">
+  <div class="countdown-box">
+    <div
+      id="countdownNumber"
+      class="countdown-number"
+    >
+      5
+    </div>
+
+    <div
+      id="countdownTitle"
+      class="countdown-title"
+    >
+      กำลังเริ่มการสาธิต
+    </div>
+
+    <div
+      id="countdownText"
+      class="countdown-text"
+    >
+      ระบบจะสร้างเหตุการณ์ไฟป่าจำลองอัตโนมัติ
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="grid">
+
+    <!-- ================= LEFT ================= -->
+
+    <div>
+
+      <div class="card">
+        <h2>🟢 สถานะระบบ</h2>
+
+        <div
+          id="statusBox"
+          class="status safe"
+        >
+          🟢 ไม่พบไฟป่าในรัศมีที่กำหนด
+        </div>
+
+        <div class="kpi">
+          <div>
+            จุดไฟทั้งหมด
+            <b id="fireCount">0</b>
+          </div>
+
+          <div>
+            ใกล้สุด
+            <b id="nearestDistance">-</b>
+          </div>
+
+          <div>
+            แหล่งข้อมูล
+            <b id="sourceText">-</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📍 ตำแหน่งบอร์ดและรัศมี</h2>
+
+        <div class="row">
+          <div>
+            <label>Latitude บอร์ด</label>
+            <input
+              id="boardLat"
+              type="number"
+              step="0.000001"
+              value="19.9105"
+            >
+          </div>
+
+          <div>
+            <label>Longitude บอร์ด</label>
+            <input
+              id="boardLng"
+              type="number"
+              step="0.000001"
+              value="99.8406"
+            >
+          </div>
+        </div>
+
+        <label>
+          รัศมีแจ้งเตือน (กม.)
+        </label>
+
+        <input
+          id="radiusKm"
+          type="number"
+          min="0.1"
+          step="0.1"
+          value="20"
+        >
+
+        <button onclick="applyLocation()">
+          ใช้ค่าตำแหน่งนี้
+        </button>
+      </div>
+
+      <div class="card">
+        <h2>📡 GISTDA API</h2>
+
+        <label>API URL</label>
+        <input
+          id="apiUrl"
+          value="https://api-gateway.gistda.or.th/api/2.0/resources/features/viirs/1day"
+        >
+
+        <label>API Key</label>
+        <input
+          id="apiKey"
+          type="password"
+          placeholder="ไม่ต้องใส่ — Backend Proxy จะจัดการ Key"
+          autocomplete="off"
+        >
+
+        <label>ประเทศ (ct_tn)</label>
+        <input
+          id="country"
+          value="ราชอาณาจักรไทย"
+        >
+
+        <div class="row">
+          <div>
+            <label>Limit</label>
+            <input
+              id="limit"
+              type="number"
+              value="1000"
+            >
+          </div>
+
+          <div>
+            <label>Offset</label>
+            <input
+              id="offset"
+              type="number"
+              value="0"
+            >
+          </div>
+        </div>
+
+        <button onclick="loadGistdaData()">
+          📥 ดึงข้อมูล GISTDA ตอนนี้
+        </button>
+
+        <p class="small">
+          ระบบรองรับ GeoJSON แบบ
+          features → geometry.coordinates → properties
+        </p>
+
+        <div class="note">
+          ⚠️ อย่าใส่ API Key จริงลงในไฟล์ที่เผยแพร่สาธารณะบน GitHub
+          สำหรับใช้งานจริงให้ Backend/Proxy บน Render จัดการ Key
+        </div>
+      </div>
+
+      <!-- =====================================================
+           DEMO CARD
+           ===================================================== -->
+
+      <div class="card demo-only demo-status">
+        <h2>🧪 โหมดสาธิตสำหรับกรรมการ</h2>
+
+        <div
+          id="demoStatus"
+          class="status safe"
+        >
+          กำลังเตรียมโหมดทดลอง
+        </div>
+
+        <p class="small">
+          เมื่อเข้าสู่โหมดทดลอง ระบบจะนับถอยหลัง 5 วินาที
+          จากนั้นใช้ตำแหน่งบอร์ดตัวอย่างเชียงราย
+          และสร้างจุดไฟป่าจำลองห่างจากบอร์ด 2 กม.
+          โดยอัตโนมัติ
+          <br><br>
+          พื้นที่สาธิต:
+          <b>ตำบลรอบเวียง อำเภอเมืองเชียงราย จังหวัดเชียงราย</b>
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>🔌 เชื่อมต่อ ESP32</h2>
+
+        <label>ESP32 URL</label>
+        <input
+          id="esp32Url"
+          value=""
+          placeholder="เว้นว่างได้ — ใช้ Polling จาก Render"
+        >
+
+        <button onclick="sendCurrentToEsp32()">
+          📤 ส่งสถานะปัจจุบันไป ESP32
+        </button>
+
+        <button
+          class="secondary"
+          onclick="testEsp32()"
+        >
+          🔎 ทดสอบการเชื่อมต่อ ESP32
+        </button>
+
+        <p class="small">
+          สำหรับหลายบอร์ด แนะนำให้ ESP32 แต่ละตัว Polling
+          สถานะจาก Render ด้วย board_id ของตัวเอง
+        </p>
+      </div>
+    </div>
+
+    <!-- ================= RIGHT ================= -->
+
+    <div>
+
+      <div class="card map-card">
+        <h2>🗺️ แผนที่จุดความร้อน</h2>
+
+        <div id="demoIncidentCard" style="display:none;margin:12px 0;padding:14px;border:1px solid #f59e0b;border-radius:12px;background:#fffaf0;">
+  <div style="font-weight:700;font-size:17px;margin-bottom:8px;">🔥 จุดเกิดเหตุจำลอง</div>
+  <div id="demoIncidentArea" style="line-height:1.7;"></div>
+  <div style="margin-top:8px;">
+    <a id="demoIncidentMaps" href="#" target="_blank" rel="noopener noreferrer"
+       style="display:inline-block;padding:9px 12px;border-radius:8px;background:#2563eb;color:#fff;text-decoration:none;">
+      🗺️ เปิดจุดเกิดเหตุใน Google Maps
+    </a>
+  </div>
+</div>
+<div id="map"></div>
+<div id="mapLoadFallback" style="display:none;margin:8px 0;padding:10px;border-radius:8px;background:#f3f4f6;color:#374151;font-size:13px;">
+  ⚠️ แผนที่กำลังโหลดหรือ Tile Map ไม่ตอบสนอง — ข้อมูลจุดเกิดเหตุยังตรวจสอบได้จากการ์ดด้านบนและปุ่ม Google Maps
+</div>
+
+        <div class="legend">
+          <span>
+            <i class="dot blue"></i>
+            ตำแหน่ง ESP32
+          </span>
+
+          <span>
+            <i class="dot red"></i>
+            จุดความร้อนในรัศมี
+          </span>
+
+          <span>
+            <i class="dot green"></i>
+            จุดนอกพื้นที่แจ้งเตือน
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🔥 รายการจุดไฟป่า</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>สถานะ</th>
+                <th>ตำแหน่ง</th>
+                <th>ระยะ (กม.)</th>
+                <th>วันที่</th>
+                <th>เวลา</th>
+                <th>พื้นที่</th>
+                <th>FRP</th>
+              </tr>
+            </thead>
+
+            <tbody id="fireTable">
+              <tr>
+                <td colspan="7">
+                  ยังไม่มีข้อมูล
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card officer-only">
+        <h2>📱 LINE แจ้งเตือน</h2>
+
+        <div class="small">
+          ทดสอบการส่งข้อความผ่าน LINE Messaging API
+        </div>
+
+        <button onclick="testLineFromWeb()">
+          📨 ส่งข้อความทดสอบ LINE
+        </button>
+
+        <div
+          id="lineStatus"
+          class="small"
+          style="margin-top:8px"
+        ></div>
+      </div>
+
+      <div class="card">
+        <h2>📤 Payload ล่าสุดที่ส่งให้ ESP32</h2>
+        <pre id="payloadBox">{}</pre>
+      </div>
+
+      <div class="card">
+        <h2>ℹ️ บันทึกระบบ</h2>
+        <pre id="logBox">พร้อมทำงาน</pre>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+
+<script>
+  /* =========================================================
+     CONFIG
+     ========================================================= */
+
+  const CONFIG = {
+    mapZoom: 9,
+
+    demoDistanceKm: 2,
+
+    // ตำแหน่งบอร์ดสำหรับ DEMO
+    demoBoardLat: 19.9105,
+    demoBoardLng: 99.8406,
+
+    // พื้นที่ที่ต้องการแสดงใน DEMO
+    demoProvince: "เชียงราย",
+    demoDistrict: "เมืองเชียงราย",
+    demoSubdistrict: "รอบเวียง",
+
+    defaultBoardLat: 19.9105,
+    defaultBoardLng: 99.8406,
+
+    // ว่าง = ใช้เว็บเดียวกันกับ Backend
+    backendUrl: ""
+  };
+
+
+  /* =========================================================
+     GLOBAL VARIABLES
+     ========================================================= */
+
+  let map;
+  let boardMarker;
+  let radiusCircle;
+
+  let fireLayer = L.layerGroup();
+
+  let boardLat =
+    CONFIG.defaultBoardLat;
+
+  let boardLng =
+    CONFIG.defaultBoardLng;
+
+  let radiusKm = 20;
+
+  let fireEvents = [];
+
+  let currentAlert = false;
+
+  let currentSource = "NONE";
+
+  let fireWatchRole = "public";
+
+  let demoStarted = false;
+
+  let demoRunning = false;
+
+
+  /* =========================================================
+     AUTH HELPER
+     ========================================================= */
+
+  function authHeaders(extra = {}) {
+    const token =
+      localStorage.getItem("firewatchToken");
+
+    return token
+      ? {
+          ...extra,
+          Authorization:
+            "Bearer " + token
+        }
+      : extra;
+  }
+
+
+  /* =========================================================
+     MAP INITIALIZATION
+     ========================================================= */
+
+  function initMap() {
+    const fallback =
+      document.getElementById("mapLoadFallback");
+
+    if (!window.L) {
+      if (fallback) {
+        fallback.style.display = "block";
+        fallback.textContent =
+          "⚠️ โหลด Leaflet ไม่สำเร็จ — ระบบยังใช้งานข้อมูลจุดไฟและ Google Maps ได้";
+      }
+      console.error("Leaflet is not available");
+      return false;
+    }
+
+    try {
+      map =
+        L.map("map", {
+          preferCanvas: true,
+          zoomControl: true
+        }).setView(
+          [boardLat, boardLng],
+          CONFIG.mapZoom
+        );
+
+      const tiles = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          maxZoom: 19,
+          attribution: "&copy; OpenStreetMap contributors",
+          crossOrigin: true
+        }
+      );
+
+      tiles.on("loading", () => {
+        if (fallback) fallback.style.display = "block";
+      });
+
+      tiles.on("load", () => {
+        if (fallback) fallback.style.display = "none";
+      });
+
+      tiles.on("tileerror", () => {
+        if (fallback) {
+          fallback.style.display = "block";
+          fallback.textContent =
+            "⚠️ แผนที่บางส่วนโหลดไม่สำเร็จ — ข้อมูลจุดเกิดเหตุยังดูได้จากตารางและ Google Maps";
+        }
+      });
+
+      tiles.addTo(map);
+      fireLayer.addTo(map);
+      updateBoardOnMap();
+
+      map.on(
+        "popupopen",
+        event => {
+          addOfficerNavigationToPopup(
+            event.popup
+          );
+        }
+      );
+
+      setTimeout(() => {
+        if (map) map.invalidateSize();
+      }, 150);
+
+      return true;
+    } catch (error) {
+      console.error("Map initialization error:", error);
+      if (fallback) {
+        fallback.style.display = "block";
+        fallback.textContent =
+          "⚠️ เปิดแผนที่ไม่สำเร็จ — ระบบยังใช้งานข้อมูลจุดไฟและ Google Maps ได้";
+      }
+      return false;
+    }
+  }
+
+  /* =========================================================
+     BOARD LOCATION
+     ========================================================= */
+
+  function updateBoardOnMap() {
+    if (!map) {
+      return;
+    }
+
+    if (boardMarker) {
+      map.removeLayer(boardMarker);
+    }
+
+    if (radiusCircle) {
+      map.removeLayer(radiusCircle);
+    }
+
+    boardMarker =
+      L.marker([
+        boardLat,
+        boardLng
+      ])
+      .addTo(map)
+      .bindPopup(
+        "<b>📡 ESP32</b><br>" +
+        "Lat: " +
+        boardLat.toFixed(6) +
+        "<br>" +
+        "Lng: " +
+        boardLng.toFixed(6) +
+        "<br>" +
+        "รัศมีแจ้งเตือน: " +
+        radiusKm +
+        " กม."
+      );
+
+    radiusCircle =
+      L.circle(
+        [boardLat, boardLng],
+        {
+          radius: radiusKm * 1000,
+          color: "#e53935",
+          fillColor: "#e53935",
+          fillOpacity: 0.08
+        }
+      ).addTo(map);
+  }
+
+
+  function applyLocation() {
+    boardLat =
+      Number(
+        document.getElementById(
+          "boardLat"
+        ).value
+      );
+
+    boardLng =
+      Number(
+        document.getElementById(
+          "boardLng"
+        ).value
+      );
+
+    radiusKm =
+      Number(
+        document.getElementById(
+          "radiusKm"
+        ).value
+      );
+
+    if (
+      !Number.isFinite(boardLat) ||
+      !Number.isFinite(boardLng) ||
+      !Number.isFinite(radiusKm) ||
+      radiusKm <= 0
+    ) {
+      alert(
+        "กรุณาตรวจสอบค่า Latitude / Longitude / รัศมี"
+      );
+      return;
+    }
+
+    updateBoardOnMap();
+
+    evaluateAlert();
+
+    log(
+      "อัปเดตตำแหน่งบอร์ดและรัศมีแล้ว"
+    );
+  }
+
+
+  /* =========================================================
+     HAVERSINE DISTANCE
+     ========================================================= */
+
+  function haversineKm(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+  ) {
+    const R = 6371;
+
+    const dLat =
+      (lat2 - lat1) *
+      Math.PI / 180;
+
+    const dLon =
+      (lon2 - lon1) *
+      Math.PI / 180;
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+
+    return (
+      2 *
+      R *
+      Math.asin(
+        Math.sqrt(a)
+      )
+    );
+  }
+
+
+  /* =========================================================
+     GISTDA DATA NORMALIZATION
+     ========================================================= */
+
+  function firstValue(...values) {
+    return (
+      values.find(
+        value =>
+          value !== undefined &&
+          value !== null &&
+          String(value).trim() !== ""
+      ) || "-"
+    );
+  }
+
+
+  function normalizeGistdaData(data) {
+    const features =
+      Array.isArray(data?.features)
+        ? data.features
+        : [];
+
+    return features
+      .map((feature, index) => {
+        const coords =
+          feature?.geometry?.coordinates;
+
+        const props =
+          feature?.properties || {};
+
+        if (
+          !Array.isArray(coords) ||
+          coords.length < 2
+        ) {
+          return null;
+        }
+
+        const lng =
+          Number(coords[0]);
+
+        const lat =
+          Number(coords[1]);
+
+        if (
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lng)
+        ) {
+          return null;
+        }
+
+        return {
+          id:
+            feature.id ||
+            props._id ||
+            String(index),
+
+          lat,
+
+          lng,
+
+          province:
+            firstValue(
+              props.changwat_t,
+              props.changwat,
+              props.prov_nam_t,
+              props.province_name,
+              props.province,
+              props.PROVINCE
+            ),
+
+          district:
+            firstValue(
+              props.amphoe_t,
+              props.amphoe,
+              props.amp_nam_t,
+              props.district_t,
+              props.district,
+              props.AMPHOE,
+              props.DISTRICT
+            ),
+
+          subdistrict:
+            firstValue(
+              props.tambon_t,
+              props.tambon,
+              props.tam_nam_t,
+              props.subdistrict_t,
+              props.subdistrict,
+              props.TAMBON,
+              props.SUBDISTRICT
+            ),
+
+          date:
+            firstValue(
+              props.acq_date,
+              props.date
+            ),
+
+          time:
+            firstValue(
+              props.acq_time,
+              props.time
+            ),
+
+          frp:
+            props.frp ??
+            props.FRP ??
+            "-",
+
+          brightness:
+            props.bright_ti4 ??
+            props.brightness ??
+            "-",
+
+          satellite:
+            firstValue(
+              props.satellite
+            ),
+
+          source:
+            "GISTDA_VIIRS"
+        };
+      })
+      .filter(Boolean);
+  }
+
+
+  /* =========================================================
+     GET GISTDA DATA
+     ========================================================= */
+
+  async function loadGistdaData() {
+    const apiUrl =
+      document
+        .getElementById("apiUrl")
+        .value
+        .trim();
+
+    const country =
+      document
+        .getElementById("country")
+        .value
+        .trim();
+
+    const limit =
+      document
+        .getElementById("limit")
+        .value ||
+      1000;
+
+    const offset =
+      document
+        .getElementById("offset")
+        .value ||
+      0;
+
+    if (!apiUrl) {
+      alert(
+        "กรุณาใส่ API URL"
+      );
+      return;
+    }
+
+    log(
+      "กำลังดึงข้อมูล GISTDA ผ่าน Backend Proxy..."
+    );
+
+    try {
+      const base =
+        (
+          CONFIG.backendUrl ||
+          ""
+        ).replace(
+          /\/$/,
+          ""
+        );
+
+      const proxyUrl =
+        base +
+        "/api/gistda";
+
+      const query =
+        "?limit=" +
+        encodeURIComponent(limit) +
+        "&offset=" +
+        encodeURIComponent(offset) +
+        "&ct_tn=" +
+        encodeURIComponent(country) +
+        "&apiUrl=" +
+        encodeURIComponent(apiUrl);
+
+      const response =
+        await fetch(
+          proxyUrl + query,
+          {
+            method: "GET",
+            headers: {
+              "Accept":
+                "application/geo+json, application/json"
+            }
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          "HTTP " +
+          response.status +
+          " " +
+          response.statusText
+        );
+      }
+
+      const data =
+        await response.json();
+
+      const events =
+        normalizeGistdaData(data);
+
+      fireEvents =
+        events;
+
+      currentSource =
+        "GISTDA";
+
+      renderFires();
+
+      evaluateAlert();
+
+      log(
+        "ดึงข้อมูลสำเร็จ: " +
+        events.length +
+        " จุด"
+      );
+
+    } catch (error) {
+      console.error(error);
+
+      log(
+        "ดึงข้อมูล GISTDA ไม่สำเร็จ: " +
+        error.message
+      );
+
+      alert(
+        "ดึงข้อมูล GISTDA ไม่สำเร็จ\n\n" +
+        error.message +
+        "\n\n" +
+        "ตรวจสอบว่า Backend Proxy ทำงานอยู่และตั้ง GISTDA_API_KEY แล้ว"
+      );
+    }
+  }
+
+
+  /* =========================================================
+     AREA TEXT
+     ========================================================= */
+
+  function areaText(fire) {
+    const parts = [];
+
+    if (
+      fire.subdistrict &&
+      fire.subdistrict !== "-"
+    ) {
+      parts.push(
+        "ต." + fire.subdistrict
+      );
+    }
+
+    if (
+      fire.district &&
+      fire.district !== "-"
+    ) {
+      parts.push(
+        "อ." + fire.district
+      );
+    }
+
+    if (
+      fire.province &&
+      fire.province !== "-"
+    ) {
+      parts.push(
+        "จ." + fire.province
+      );
+    }
+
+    return parts.length
+      ? parts.join(" ")
+      : "-";
+  }
+
+
+  /* =========================================================
+     RENDER FIRE MARKERS
+     ========================================================= */
+
+  function showDemoIncidentCard(fire) {
+  const card = document.getElementById("demoIncidentCard");
+  const area = document.getElementById("demoIncidentArea");
+  const maps = document.getElementById("demoIncidentMaps");
+
+  if (!card || !area || !maps || !fire) return;
+
+  const lat = Number(fire.lat);
+  const lng = Number(fire.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  const province = fire.province || "-";
+  const district = fire.district || "-";
+  const subdistrict = fire.subdistrict || "-";
+  const distance = Number.isFinite(Number(fire.distance))
+    ? Number(fire.distance).toFixed(2)
+    : "-";
+
+  area.innerHTML =
+    "<b>📍 พื้นที่:</b> ต." + escapeHtml(subdistrict) +
+    " อ." + escapeHtml(district) +
+    " จ." + escapeHtml(province) +
+    "<br><b>📌 พิกัด:</b> " + lat.toFixed(6) + ", " + lng.toFixed(6) +
+    "<br><b>📏 ระยะจาก CR01:</b> " + distance + " กม." +
+    "<br><span style='font-size:13px;color:#666;'>จุดนี้เป็นจุดจำลองเดียวกับที่แสดงบนแผนที่</span>";
+
+  maps.href =
+    "https://www.google.com/maps/dir/?api=1&destination=" +
+    lat.toFixed(6) + "," + lng.toFixed(6);
+
+  card.style.display = "block";
+}
+
+function hideDemoIncidentCard() {
+  const card = document.getElementById("demoIncidentCard");
+  if (card) card.style.display = "none";
+}
+
+function renderFires() {
+    const demoFire =
+      fireEvents.find(fire => fire.source === "DEMO");
+
+    if (demoFire) {
+      showDemoIncidentCard(demoFire);
+    } else {
+      hideDemoIncidentCard();
+    }
+
+    fireLayer.clearLayers();
+
+    const table =
+      document.getElementById(
+        "fireTable"
+      );
+
+    table.innerHTML = "";
+
+    if (!fireEvents.length) {
+      table.innerHTML =
+        "<tr>" +
+        "<td colspan=\"7\">" +
+        "ไม่พบข้อมูลจุดความร้อน" +
+        "</td>" +
+        "</tr>";
+
+      document.getElementById(
+        "fireCount"
+      ).textContent = "0";
+
+      document.getElementById(
+        "nearestDistance"
+      ).textContent = "-";
+
+      hideDemoIncidentCard();
+      return;
+    }
+
+    let nearest =
+      Infinity;
+
+    fireEvents.forEach(
+      fire => {
+        fire.distance =
+          haversineKm(
+            boardLat,
+            boardLng,
+            fire.lat,
+            fire.lng
+          );
+
+        if (
+          fire.distance <
+          nearest
+        ) {
+          nearest =
+            fire.distance;
+        }
+
+        const inside =
+          fire.distance <=
+          radiusKm;
+
+        const marker =
+          L.circleMarker(
+            [
+              fire.lat,
+              fire.lng
+            ],
+            {
+              radius:
+                inside ? 9 : 6,
+
+              color:
+                inside
+                  ? "#e53935"
+                  : "#1f9d55",
+
+              fillColor:
+                inside
+                  ? "#e53935"
+                  : "#1f9d55",
+
+              fillOpacity: .85,
+
+              weight: 2
+            }
+          );
+
+        const title =
+          fire.source === "DEMO"
+            ? "🔥 จุดความร้อน (DEMO)"
+            : "🔥 จุดความร้อน";
+
+        const mapsUrl =
+          "https://www.google.com/maps/dir/?api=1&destination=" +
+          fire.lat.toFixed(6) +
+          "," +
+          fire.lng.toFixed(6);
+
+        marker.bindPopup(
+          "<b>" +
+          title +
+          "</b><br><br>" +
+
+          "<b>📍 จุดเกิดเหตุ</b><br>" +
+          escapeHtml(
+            areaText(fire)
+          ) +
+          "<br><br>" +
+
+          "<b>พิกัดจริงบนแผนที่</b><br>" +
+          "Lat: " +
+          fire.lat.toFixed(6) +
+          "<br>" +
+          "Lng: " +
+          fire.lng.toFixed(6) +
+          "<br>" +
+
+          "ระยะจากบอร์ด CR01: " +
+          fire.distance.toFixed(2) +
+          " กม.<br>" +
+
+          "วันที่: " +
+          escapeHtml(
+            fire.date
+          ) +
+          "<br>" +
+
+          "เวลา: " +
+          escapeHtml(
+            fire.time
+          ) +
+
+          (
+            fire.source === "DEMO"
+              ? "<br><br><b>⚠️ ข้อมูลจำลองเพื่อสาธิตสถานการณ์จริง</b>"
+              : ""
+          ) +
+
+          "<br><br>" +
+          "<a href=\"" +
+          escapeHtml(mapsUrl) +
+          "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
+          "🗺️ เปิดจุดเกิดเหตุใน Google Maps" +
+          "</a>"
+        );
+
+        marker.addTo(
+          fireLayer
+        );
+
+        const tr =
+          document.createElement(
+            "tr"
+          );
+
+        tr.innerHTML =
+          "<td>" +
+          (
+            inside
+              ? "<span class=\"badge alert\">แจ้งเตือน</span>"
+              : "<span class=\"badge safe\">ปกติ</span>"
+          ) +
+          "</td>" +
+
+          "<td>" +
+          fire.lat.toFixed(5) +
+          ", " +
+          fire.lng.toFixed(5) +
+
+          (
+            fire.source === "DEMO"
+              ? "<br><b>DEMO</b>"
+              : ""
+          ) +
+
+          "</td>" +
+
+          "<td>" +
+          fire.distance.toFixed(2) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(
+            fire.date
+          ) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(
+            fire.time
+          ) +
+          "</td>" +
+
+          "<td class=\"area-line\">" +
+          escapeHtml(
+            areaText(fire)
+          ) +
+          (
+            fire.source === "DEMO"
+              ? "<br><span class=\"small\">📍 จุดเกิดเหตุจำลอง</span>"
+              : ""
+          ) +
+          "</td>" +
+
+          "<td>" +
+          escapeHtml(
+            String(fire.frp)
+          ) +
+          "</td>";
+
+        table.appendChild(
+          tr
+        );
+      }
+    );
+
+    document.getElementById(
+      "fireCount"
+    ).textContent =
+      fireEvents.length;
+
+    document.getElementById(
+      "nearestDistance"
+    ).textContent =
+      Number.isFinite(nearest)
+        ? nearest.toFixed(2) +
+          " กม."
+        : "-";
+  }
+
+
+  /* =========================================================
+     ALERT EVALUATION
+     ========================================================= */
+
+  function evaluateAlert() {
+    if (!fireEvents.length) {
+      setAlertState(
+        false,
+        "NONE"
+      );
+
+      return;
+    }
+
+    let nearestFire =
+      null;
+
+    fireEvents.forEach(
+      fire => {
+        fire.distance =
+          haversineKm(
+            boardLat,
+            boardLng,
+            fire.lat,
+            fire.lng
+          );
+
+        if (
+          fire.distance <=
+          radiusKm &&
+          (
+            nearestFire === null ||
+            fire.distance <
+            nearestFire.distance
+          )
+        ) {
+          nearestFire =
+            fire;
+        }
+      }
+    );
+
+    if (nearestFire) {
+      setAlertState(
+        true,
+        currentSource ||
+        "GISTDA",
+        nearestFire
+      );
+    } else {
+      setAlertState(
+        false,
+        currentSource ||
+        "GISTDA"
+      );
+    }
+
+    renderFires();
+  }
+
+
+  /* =========================================================
+     SET ALERT STATE
+     ========================================================= */
+
+  function setAlertState(
+    alertState,
+    source,
+    nearestFire = null
+  ) {
+    currentAlert =
+      alertState;
+
+    currentSource =
+      source;
+
+    const box =
+      document.getElementById(
+        "statusBox"
+      );
+
+    if (alertState) {
+      box.className =
+        "status alert";
+
+      box.innerHTML =
+        (
+          source === "DEMO"
+            ? "🧪 "
+            : "🔴 "
+        ) +
+
+        (
+          source === "DEMO"
+            ? "DEMO: พบไฟป่าจำลองในรัศมี "
+            : "พบไฟป่าในรัศมี "
+        ) +
+
+        radiusKm +
+        " กม.";
+
+      if (nearestFire) {
+        box.innerHTML +=
+          "<div class=\"small\" style=\"margin-top:6px\">" +
+          escapeHtml(
+            areaText(nearestFire)
+          ) +
+          "</div>";
+      }
+
+    } else {
+      box.className =
+        "status safe";
+
+      box.innerHTML =
+        "🟢 ไม่พบไฟป่าในรัศมีที่กำหนด";
+    }
+
+    document.getElementById(
+      "sourceText"
+    ).textContent =
+      source === "GISTDA"
+        ? "GISTDA"
+        : source === "DEMO"
+          ? "DEMO"
+          : "-";
+
+    const payload =
+      createEsp32Payload(
+        alertState,
+        nearestFire
+      );
+
+    document.getElementById(
+      "payloadBox"
+    ).textContent =
+      JSON.stringify(
+        payload,
+        null,
+        2
+      );
+  }
+
+
+  /* =========================================================
+     CREATE ESP32 PAYLOAD
+     ========================================================= */
+
+  function createEsp32Payload(
+    fire,
+    nearestFire = null
+  ) {
+    return {
+      fire:
+        Boolean(fire),
+
+      distance_km:
+        nearestFire
+          ? Number(
+              nearestFire.distance
+                .toFixed(3)
+            )
+          : null,
+
+      lat:
+        nearestFire
+          ? nearestFire.lat
+          : null,
+
+      lng:
+        nearestFire
+          ? nearestFire.lng
+          : null,
+
+      source:
+        currentSource,
+
+      province:
+        nearestFire
+          ? nearestFire.province
+          : null,
+
+      district:
+        nearestFire
+          ? nearestFire.district
+          : null,
+
+      subdistrict:
+        nearestFire
+          ? nearestFire.subdistrict
+          : null,
+
+      date:
+        nearestFire
+          ? nearestFire.date
+          : null,
+
+      time:
+        nearestFire
+          ? nearestFire.time
+          : null,
+
+      radius_km:
+        radiusKm
+    };
+  }
+
+
+  /* =========================================================
+     SEND TO ESP32
+     ========================================================= */
+
+  async function sendCurrentToEsp32() {
+    const input =
+      document.getElementById(
+        "esp32Url"
+      );
+
+    const esp32Url =
+      input
+        ? input.value
+            .trim()
+            .replace(
+              /\/$/,
+              ""
+            )
+        : "";
+
+    if (!esp32Url) {
+      log(
+        "ESP32 ใช้การเชื่อมต่อแบบ Polling จาก Render; ยังไม่ต้องใส่ Local URL"
+      );
+
+      return;
+    }
+
+    let nearestFire =
+      null;
+
+    fireEvents.forEach(
+      fire => {
+        if (
+          fire.distance <=
+          radiusKm &&
+          (
+            nearestFire === null ||
+            fire.distance <
+            nearestFire.distance
+          )
+        ) {
+          nearestFire =
+            fire;
+        }
+      }
+    );
+
+    const payload =
+      createEsp32Payload(
+        currentAlert,
+        nearestFire
+      );
+
+    document.getElementById(
+      "payloadBox"
+    ).textContent =
+      JSON.stringify(
+        payload,
+        null,
+        2
+      );
+
+    try {
+      const response =
+        await fetch(
+          esp32Url +
+          "/api/alert",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+
+            body:
+              JSON.stringify(
+                payload
+              )
+          }
+        );
+
+      const text =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          "HTTP " +
+          response.status +
+          " " +
+          text
+        );
+      }
+
+      log(
+        "ส่งสถานะไป ESP32 สำเร็จ"
+      );
+
+    } catch (error) {
+      log(
+        "ส่งไป ESP32 ไม่สำเร็จ: " +
+        error.message
+      );
+
+      console.error(error);
+    }
+  }
+
+
+  /* =========================================================
+     TEST ESP32
+     ========================================================= */
+
+  async function testEsp32() {
+    const esp32Url =
+      document
+        .getElementById(
+          "esp32Url"
+        )
+        .value
+        .trim()
+        .replace(
+          /\/$/,
+          ""
+        );
+
+    if (!esp32Url) {
+      alert(
+        "กรุณาใส่ ESP32 URL"
+      );
+
+      return;
+    }
+
+    try {
+      const response =
+        await fetch(
+          esp32Url + "/",
+          {
+            method: "GET"
+          }
+        );
+
+      const text =
+        await response.text();
+
+      log(
+        "ESP32 ตอบกลับ: " +
+        text
+      );
+
+      alert(
+        "เชื่อมต่อ ESP32 สำเร็จ"
+      );
+
+    } catch (error) {
+      log(
+        "ทดสอบ ESP32 ไม่สำเร็จ: " +
+        error.message
+      );
+
+      alert(
+        "เชื่อมต่อ ESP32 ไม่สำเร็จ\n" +
+        error.message
+      );
+    }
+  }
+
+
+  /* =========================================================
+     LOG
+     ========================================================= */
+
+  function log(message) {
+    const box =
+      document.getElementById(
+        "logBox"
+      );
+
+    const time =
+      new Date()
+        .toLocaleTimeString(
+          "th-TH"
+        );
+
+    const old =
+      box.textContent
+        ? box.textContent
+        : "";
+
+    box.textContent =
+      "[" +
+      time +
+      "] " +
+      message +
+      "\n" +
+      old;
+
+    console.log(message);
+  }
+
+
+  /* =========================================================
+     HTML ESCAPE
+     ========================================================= */
+
+  function escapeHtml(value) {
+    return String(
+      value ?? ""
+    )
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
+  }
+
+
+  /* =========================================================
+     ROLE / LOGIN
+     ========================================================= */
+
+  function roleLabel(role) {
+    return role === "officer"
+      ? "🚒 เจ้าหน้าที่"
+      : role === "demo"
+        ? "🧪 โหมดทดลอง"
+        : "👤 ประชาชนทั่วไป";
+  }
+
+
+  function selectLoginRole(role) {
+    fireWatchRole =
+      role;
+
+    [
+      "public",
+      "officer",
+      "demo"
+    ].forEach(
+      r => {
+        const btn =
+          document.getElementById(
+            "mode" +
+            r[0].toUpperCase() +
+            r.slice(1)
+          );
+
+        if (btn) {
+          btn.classList.toggle(
+            "active",
+            r === role
+          );
+        }
+      }
+    );
+
+    document.getElementById(
+      "credentialBox"
+    ).style.display =
+      role === "public"
+        ? "none"
+        : "block";
+
+    document.getElementById(
+      "loginMessage"
+    ).textContent =
+      role === "public"
+        ? "ประชาชนสามารถเข้าสู่ระบบได้ทันทีเพื่อดูข้อมูล"
+        : role === "officer"
+          ? "สำหรับเจ้าหน้าที่ที่ได้รับบัญชีจากผู้ดูแลระบบ"
+          : "สำหรับการสาธิต/การแข่งขันเท่านั้น";
+  }
+
+
+  /* =========================================================
+     LOGIN
+     ========================================================= */
+
+  async function loginFireWatch() {
+    const username =
+      document
+        .getElementById(
+          "loginUsername"
+        )
+        .value
+        .trim();
+
+    const password =
+      document
+        .getElementById(
+          "loginPassword"
+        )
+        .value;
+
+    const box =
+      document.getElementById(
+        "loginMessage"
+      );
+
+    box.textContent =
+      "กำลังเข้าสู่ระบบ...";
+
+    try {
+      const response =
+        await fetch(
+          "/api/login",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+
+            body:
+              JSON.stringify({
+                role:
+                  fireWatchRole,
+
+                username:
+                  username,
+
+                password:
+                  password
+              })
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.ok
+      ) {
+        throw new Error(
+          data.error ||
+          "เข้าสู่ระบบไม่สำเร็จ"
+        );
+      }
+
+      if (data.token) {
+        localStorage.setItem(
+          "firewatchToken",
+          data.token
+        );
+      }
+
+      applyRole(
+        data.role
+      );
+
+      document.getElementById(
+        "loginOverlay"
+      ).style.display =
+        "none";
+
+      document.getElementById(
+        "roleBar"
+      ).style.display =
+        "flex";
+
+      if (
+        data.role === "demo"
+      ) {
+        log(
+          "เข้าสู่โหมดทดลองสำหรับการแข่งขัน"
+        );
+
+        setTimeout(
+          startAutomaticDemo,
+          400
+        );
+
+      } else if (
+        data.role === "officer"
+      ) {
+        log(
+          "เข้าสู่ระบบในสิทธิ์เจ้าหน้าที่"
+        );
+
+      } else {
+        log(
+          "เข้าสู่ระบบในสิทธิ์ประชาชนทั่วไป"
+        );
+      }
+
+    } catch (error) {
+      box.textContent =
+        "❌ " +
+        error.message;
+    }
+  }
+
+
+  /* =========================================================
+     APPLY ROLE
+     ========================================================= */
+
+  function applyRole(role) {
+    fireWatchRole =
+      role;
+
+    document.body.classList.remove(
+      "role-public",
+      "role-officer",
+      "role-demo",
+      "app-locked"
+    );
+
+    document.body.classList.add(
+      "role-" + role
+    );
+
+    document.getElementById(
+      "rolePill"
+    ).textContent =
+      roleLabel(role);
+
+    document.getElementById(
+      "rolePill"
+    ).className =
+      "role-pill" +
+      (
+        role === "demo"
+          ? " demo"
+          : role === "officer"
+            ? " officer"
+            : ""
+      );
+
+    document.getElementById(
+      "roleName"
+    ).textContent =
+      role === "demo"
+        ? "ข้อมูลจำลองสำหรับการแข่งขัน"
+        : role === "officer"
+          ? "สามารถนำทางไปยังจุดเกิดเหตุได้"
+          : "ดูข้อมูลจุดความร้อนและสถานะแจ้งเตือน";
+  }
+
+
+  /* =========================================================
+     CHECK EXISTING LOGIN
+     ========================================================= */
+
+  async function checkExistingLogin() {
+    try {
+      const response =
+        await fetch(
+          "/api/me",
+          {
+            method: "GET",
+            headers:
+              authHeaders()
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        response.ok &&
+        data.ok
+      ) {
+        applyRole(
+          data.role
+        );
+
+        document.getElementById(
+          "loginOverlay"
+        ).style.display =
+          "none";
+
+        document.getElementById(
+          "roleBar"
+        ).style.display =
+          "flex";
+
+        if (
+          data.role === "demo"
+        ) {
+          setTimeout(
+            startAutomaticDemo,
+            400
+          );
+        }
+
+      } else {
+        document.body.classList.add(
+          "app-locked"
+        );
+      }
+
+    } catch (error) {
+      document.body.classList.add(
+        "app-locked"
+      );
+
+      document.getElementById(
+        "loginMessage"
+      ).textContent =
+        "เชื่อมต่อระบบเข้าสู่ระบบไม่ได้: " +
+        error.message;
+    }
+  }
+
+
+  /* =========================================================
+     LOGOUT
+     ========================================================= */
+
+  async function logoutFireWatch() {
+    try {
+      await fetch(
+        "/api/logout",
+        {
+          method: "POST",
+          headers:
+            authHeaders()
+        }
+      );
+
+    } catch (error) {
+      console.error(error);
+    }
+
+    localStorage.removeItem(
+      "firewatchToken"
+    );
+
+    location.reload();
+  }
+
+
+  /* =========================================================
+     LINE TEST
+     ========================================================= */
+
+  async function testLineFromWeb() {
+    const box =
+      document.getElementById(
+        "lineStatus"
+      );
+
+    box.textContent =
+      "กำลังส่ง...";
+
+    try {
+      const response =
+        await fetch(
+          "/api/line/test",
+          {
+            method: "POST",
+            headers:
+              authHeaders()
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.ok
+      ) {
+        throw new Error(
+          data.reason ||
+          data.error ||
+          "ส่ง LINE ไม่สำเร็จ"
+        );
+      }
+
+      box.textContent =
+        "✅ ส่งข้อความทดสอบแล้ว";
+
+    } catch (error) {
+      box.textContent =
+        "❌ " +
+        error.message;
+    }
+  }
+
+
+  /* =========================================================
+     OFFICER NAVIGATION
+     ========================================================= */
+
+  function addOfficerNavigationToPopup(
+    popup
+  ) {
+    if (
+      fireWatchRole !==
+      "officer"
+    ) {
+      return;
+    }
+
+    const latlng =
+      popup.getLatLng();
+
+    if (!latlng) {
+      return;
+    }
+
+    const lat =
+      Number(
+        latlng.lat
+      ).toFixed(6);
+
+    const lng =
+      Number(
+        latlng.lng
+      ).toFixed(6);
+
+    const url =
+      "https://www.google.com/maps/dir/?api=1&destination=" +
+      encodeURIComponent(
+        lat +
+        "," +
+        lng
+      );
+
+    const current =
+      popup.getContent();
+
+    if (
+      typeof current !==
+      "string"
+    ) {
+      return;
+    }
+
+    if (
+      current.includes(
+        "นำทาง"
+      )
+    ) {
+      return;
+    }
+
+    popup.setContent(
+      current +
+      "<br><br>" +
+      "<a class=\"nav-button\" href=\"" +
+      escapeHtml(url) +
+      "\" target=\"_blank\" rel=\"noopener\">" +
+      "🧭 นำทางไปจุดเกิดเหตุ" +
+      "</a>"
+    );
+  }
+
+
+  /* =========================================================
+     DEMO COUNTDOWN
+     ========================================================= */
+
+  function showDemoCountdown() {
+    const overlay =
+      document.getElementById(
+        "demoCountdown"
+      );
+
+    const number =
+      document.getElementById(
+        "countdownNumber"
+      );
+
+    const title =
+      document.getElementById(
+        "countdownTitle"
+      );
+
+    const text =
+      document.getElementById(
+        "countdownText"
+      );
+
+    overlay.style.display =
+      "flex";
+
+    title.textContent =
+      "กำลังเริ่มการสาธิต";
+
+    text.textContent =
+      "ระบบจะสร้างเหตุการณ์ไฟป่าจำลองอัตโนมัติ";
+
+    let count = 5;
+
+    number.textContent =
+      count;
+
+    return new Promise(
+      resolve => {
+        const timer =
+          setInterval(
+            () => {
+              count--;
+
+              if (
+                count <= 0
+              ) {
+                clearInterval(
+                  timer
+                );
+
+                number.textContent =
+                  "🔥";
+
+                title.textContent =
+                  "กำลังสร้างเหตุการณ์ DEMO";
+
+                text.textContent =
+                  "ใช้ตำแหน่งบอร์ดตัวอย่างเชียงราย";
+
+                setTimeout(
+                  () => {
+                    resolve();
+                  },
+                  700
+                );
+
+                return;
+              }
+
+              number.textContent =
+                count;
+            },
+            1000
+          );
+      }
+    );
+  }
+
+
+  function hideDemoCountdown() {
+    document.getElementById(
+      "demoCountdown"
+    ).style.display =
+      "none";
+  }
+
+
+  function updateDemoStatus(
+    message,
+    alertState = false
+  ) {
+    const box =
+      document.getElementById(
+        "demoStatus"
+      );
+
+    if (!box) {
+      return;
+    }
+
+    box.className =
+      alertState
+        ? "status alert"
+        : "status safe";
+
+    box.innerHTML =
+      message;
+  }
+
+
+  /* =========================================================
+     AUTOMATIC DEMO MAIN
+     ========================================================= */
+
+  async function startAutomaticDemo() {
+    if (
+      fireWatchRole !==
+      "demo"
+    ) {
+      return;
+    }
+
+    if (
+      demoStarted ||
+      demoRunning
+    ) {
+      return;
+    }
+
+    demoStarted =
+      true;
+
+    demoRunning =
+      true;
+
+    try {
+      updateDemoStatus(
+        "กำลังเตรียมการสาธิต..."
+      );
+
+      await showDemoCountdown();
+
+      /*
+        DEMO ใช้ตำแหน่งบอร์ดตัวอย่างแบบคงที่
+        เพื่อให้พื้นที่กับบอร์ดตรงกันทุกครั้ง
+      */
+
+      boardLat =
+        CONFIG.demoBoardLat;
+
+      boardLng =
+        CONFIG.demoBoardLng;
+
+      document.getElementById(
+        "boardLat"
+      ).value =
+        boardLat.toFixed(6);
+
+      document.getElementById(
+        "boardLng"
+      ).value =
+        boardLng.toFixed(6);
+
+      updateBoardOnMap();
+
+      if (map) {
+        map.setView(
+          [
+            boardLat,
+            boardLng
+          ],
+          CONFIG.mapZoom
+        );
+      }
+
+      updateDemoStatus(
+        "📍 ใช้ตำแหน่งบอร์ด DEMO: " +
+        "19.9105, 99.8406"
+      );
+
+      /*
+        CREATE FIRE 2 KM NORTH
+      */
+
+      const demoLat =
+        boardLat +
+        (
+          CONFIG.demoDistanceKm /
+          111.32
+        );
+
+      const demoLng =
+        boardLng;
+
+      const now =
+        new Date();
+
+      fireEvents = [
+        {
+          id:
+            "DEMO-" +
+            Date.now(),
+
+          lat:
+            demoLat,
+
+          lng:
+            demoLng,
+
+          province:
+            CONFIG.demoProvince,
+
+          district:
+            CONFIG.demoDistrict,
+
+          subdistrict:
+            CONFIG.demoSubdistrict,
+
+          date:
+            now
+              .toISOString()
+              .slice(0,10),
+
+          time:
+            now
+              .toTimeString()
+              .slice(0,5),
+
+          frp:
+            "DEMO",
+
+          brightness:
+            "DEMO",
+
+          satellite:
+            "DEMO",
+
+          source:
+            "DEMO"
+        }
+      ];
+
+      currentSource =
+        "DEMO";
+
+      renderFires();
+
+      evaluateAlert();
+
+      updateDemoStatus(
+        currentAlert
+          ? "🧪 DEMO: ตรวจพบไฟป่าจำลองในรัศมี<br>" +
+            "<span class=\"small\">" +
+            "📍 จุดเกิดเหตุ: ต.รอบเวียง อ.เมืองเชียงราย จ.เชียงราย<br>" +
+            "พิกัด: " +
+            demoLat.toFixed(6) +
+            ", " +
+            demoLng.toFixed(6) +
+            "<br>ระยะจาก CR01: " +
+            CONFIG.demoDistanceKm.toFixed(2) +
+            " กม." +
+            "</span>"
+          : "🧪 DEMO: สร้างจุดไฟจำลองแล้ว",
+        currentAlert
+      );
+
+      log(
+        "สร้างจุดเกิดเหตุ DEMO: " +
+        demoLat.toFixed(6) +
+        ", " +
+        demoLng.toFixed(6) +
+        " | ต.รอบเวียง อ.เมืองเชียงราย จ.เชียงราย | ห่าง CR01 " +
+        CONFIG.demoDistanceKm.toFixed(2) +
+        " กม."
+      );
+
+      /*
+        SEND DEMO TO BACKEND / LINE
+      */
+
+      const response =
+        await fetch(
+          "/api/demo/alert",
+          {
+            method: "POST",
+
+            headers:
+              authHeaders({
+                "Content-Type":
+                  "application/json"
+              }),
+
+            body:
+              JSON.stringify({
+                lat:
+                  demoLat,
+
+                lng:
+                  demoLng,
+
+                board_lat:
+                  boardLat,
+
+                board_lng:
+                  boardLng,
+
+                distance_km:
+                  CONFIG.demoDistanceKm
+              })
+          }
+        );
+
+      const data =
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
+
+      if (
+        response.ok &&
+        data.ok
+      ) {
+        log(
+          "ส่ง DEMO แจ้งเตือน LINE แล้ว"
+        );
+      } else {
+        log(
+          "สร้าง DEMO สำเร็จ แต่ส่ง LINE ไม่สำเร็จ: " +
+          (
+            data.reason ||
+            data.error ||
+            "unknown"
+          )
+        );
+      }
+
+      /*
+        SEND TO ESP32 IF LOCAL URL EXISTS
+      */
+
+      await sendCurrentToEsp32();
+
+      updateDemoStatus(
+        "🧪 DEMO: พร้อมสาธิต — พบไฟป่าจำลอง<br>" +
+        "<span class=\"small\">" +
+        "📍 จุดเกิดเหตุ: ต.รอบเวียง อ.เมืองเชียงราย จ.เชียงราย<br>" +
+        "พิกัด: " +
+        demoLat.toFixed(6) +
+        ", " +
+        demoLng.toFixed(6) +
+        "<br>ระยะจาก CR01: " +
+        CONFIG.demoDistanceKm.toFixed(2) +
+        " กม.<br>" +
+        "🗺️ จุดนี้แสดงเป็น Marker บนแผนที่" +
+        "</span>",
+        true
+      );
+
+    } catch (error) {
+      console.error(
+        "Automatic demo error:",
+        error
+      );
+
+      updateDemoStatus(
+        "❌ DEMO ขัดข้อง: " +
+        escapeHtml(
+          error.message
+        )
+      );
+
+      log(
+        "Automatic DEMO error: " +
+        error.message
+      );
+
+    } finally {
+      hideDemoCountdown();
+
+      demoRunning =
+        false;
+    }
+  }
+
+
+  /* =========================================================
+     START
+     ========================================================= */
+
+  window.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      initMap();
+
+      setTimeout(
+        () => {
+          if (map) {
+            map.invalidateSize();
+          }
+        },
+        300
+      );
+
+      setAlertState(
+        false,
+        "NONE"
+      );
+
+      log(
+        "ระบบพร้อมใช้งาน"
+      );
+
+      checkExistingLogin();
+    }
+  );
+</script>
+
+</body>
+</html>
