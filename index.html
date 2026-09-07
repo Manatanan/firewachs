@@ -2309,71 +2309,26 @@ function applyRole(role){
 
 async function checkExistingLogin(){
 
-  try{
+  // บังคับให้เปิดเว็บใหม่แล้วแสดงหน้าเลือก Login
+  localStorage.removeItem("firewatchToken");
 
-    const response =
-      await fetch(
-        "/api/me",
-        {
-          method:"GET",
-          headers:
-            authHeaders()
-        }
-      );
+  document.body.classList.add("app-locked");
 
-    const data =
-      await response.json();
+  const loginOverlay =
+    document.getElementById("loginOverlay");
 
-    if(
-      response.ok &&
-      data.ok
-    ){
+  const roleBar =
+    document.getElementById("roleBar");
 
-      applyRole(
-        data.role
-      );
-
-      document.getElementById(
-        "loginOverlay"
-      ).style.display =
-        "none";
-
-      document.getElementById(
-        "roleBar"
-      ).style.display =
-        "flex";
-
-      if(
-        data.role === "demo"
-      ){
-
-        setTimeout(
-          startAutomaticDemo,
-          400
-        );
-      }
-
-    }else{
-
-      document.body.classList.add(
-        "app-locked"
-      );
-    }
-
-  }catch(error){
-
-    document.body.classList.add(
-      "app-locked"
-    );
-
-    document.getElementById(
-      "loginMessage"
-    ).textContent =
-      "เชื่อมต่อระบบเข้าสู่ระบบไม่ได้: " +
-      error.message;
+  if(loginOverlay){
+    loginOverlay.style.display = "flex";
   }
-}
 
+  if(roleBar){
+    roleBar.style.display = "none";
+  }
+
+}
 
 /* =========================================================
    LOGOUT
