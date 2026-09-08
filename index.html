@@ -771,14 +771,24 @@
           กำลังเตรียมโหมดทดลอง
         </div>
 
+        <div id="demoBoardStatus" class="small" style="margin-top:10px;padding:10px;background:#f7faf8;border-radius:10px;"></div>
+
+        <div class="row" style="margin-top:8px;">
+          <button class="demo" onclick="moveDemoFireToBoard('CR01')">🔥 ทดสอบ CR01</button>
+          <button class="demo" onclick="moveDemoFireToBoard('CR02')">🔥 ทดสอบ CR02</button>
+        </div>
+        <button class="danger" onclick="clearDemoFire()">🛑 หยุด DEMO / ปิดเสียงบอร์ด</button>
+
         <p class="small">
           เมื่อเข้าสู่โหมดทดลอง ระบบจะนับถอยหลัง 5 วินาที
-          จากนั้นใช้ตำแหน่งบอร์ดตัวอย่างเชียงราย
-          และสร้างจุดไฟป่าจำลองห่างจากบอร์ด 2 กม.
-          โดยอัตโนมัติ
+          จากนั้นสร้างจุดไฟป่าจำลองบนแผนที่
+          <b>สามารถลาก 🔥 จุดไฟไปมาได้</b> เพื่อทดสอบว่า
+          บอร์ดใดอยู่ในรัศมีและควรแจ้งเตือน
           <br><br>
-          พื้นที่สาธิต:
-          <b>ตำบลรอบเวียง อำเภอเมืองเชียงราย จังหวัดเชียงราย</b>
+          <b>CR01</b> และ <b>CR02</b> มีรัศมีบอร์ดละ 20 กม.
+          <br>ไฟอยู่ใน CR01 → CR01 แจ้งเตือน
+          <br>ไฟอยู่ใน CR02 → CR02 แจ้งเตือน
+          <br>ไฟอยู่นอกทั้งสอง → ไม่มีบอร์ดแจ้งเตือน
         </p>
       </div>
 
@@ -935,6 +945,11 @@
     demoDistrict: "เมืองเชียงราย",
     demoSubdistrict: "รอบเวียง",
 
+    demoBoards: [
+      { board_id: "CR01", name: "ESP32 Board 01", lat: 19.9105, lng: 99.8406, radius_km: 20 },
+      { board_id: "CR02", name: "ESP32 Board 02", lat: 19.5500, lng: 100.1000, radius_km: 20 }
+    ],
+
     defaultBoardLat: 19.9105,
     defaultBoardLng: 99.8406,
 
@@ -950,6 +965,11 @@
   let map;
   let boardMarker;
   let radiusCircle;
+  let boardMarkers = [];
+  let radiusCircles = [];
+  let demoFireMarker = null;
+  let demoFireDragTimer = null;
+  let demoCoveredBoards = [];
 
   let fireLayer = L.layerGroup();
 
@@ -1079,47 +1099,53 @@
      ========================================================= */
 
   function updateBoardOnMap() {
-    if (!map) {
-      return;
-    }
+    if (!map) return;
 
-    if (boardMarker) {
-      map.removeLayer(boardMarker);
-    }
+    boardMarkers.forEach(marker => map.removeLayer(marker));
+    radiusCircles.forEach(circle => map.removeLayer(circle));
+    boardMarkers = [];
+    radiusCircles = [];
 
-    if (radiusCircle) {
-      map.removeLayer(radiusCircle);
-    }
+    const boards = fireWatchRole === "demo"
+      ? CONFIG.demoBoards
+      : [{ board_id: "CR01", name: "ESP32 Board 01", lat: boardLat, lng: boardLng, radius_km: radiusKm }];
 
-    boardMarker =
-      L.marker([
-        boardLat,
-        boardLng
-      ])
-      .addTo(map)
-      .bindPopup(
-        "<b>📡 ESP32</b><br>" +
-        "Lat: " +
-        boardLat.toFixed(6) +
-        "<br>" +
-        "Lng: " +
-        boardLng.toFixed(6) +
-        "<br>" +
-        "รัศมีแจ้งเตือน: " +
-        radiusKm +
-        " กม."
+    boards.forEach((board, index) => {
+      const isCovered = demoCoveredBoards.some(
+        item => item.board_id === board.board_id
       );
 
-    radiusCircle =
-      L.circle(
-        [boardLat, boardLng],
+      const marker = L.marker([board.lat, board.lng])
+        .addTo(map)
+        .bindPopup(
+          "<b>📡 " + escapeHtml(board.name) + "</b><br>" +
+          "Board ID: " + escapeHtml(board.board_id) + "<br>" +
+          "Lat: " + board.lat.toFixed(6) + "<br>" +
+          "Lng: " + board.lng.toFixed(6) + "<br>" +
+          "รัศมีแจ้งเตือน: " + board.radius_km + " กม."
+        );
+
+      const circle = L.circle(
+        [board.lat, board.lng],
         {
-          radius: radiusKm * 1000,
-          color: "#e53935",
-          fillColor: "#e53935",
-          fillOpacity: 0.08
+          radius: board.radius_km * 1000,
+          color: isCovered ? "#e53935" : (index === 0 ? "#2878d7" : "#7b61ff"),
+          fillColor: isCovered ? "#e53935" : (index === 0 ? "#2878d7" : "#7b61ff"),
+          fillOpacity: isCovered ? 0.15 : 0.07,
+          weight: isCovered ? 4 : 2
         }
       ).addTo(map);
+
+      boardMarkers.push(marker);
+      radiusCircles.push(circle);
+    });
+
+    // เก็บตัวแปรเดิมไว้ให้ Citizen/Officer logic เดิมทำงานต่อ
+    if (boards.length) {
+      boardLat = boards[0].lat;
+      boardLng = boards[0].lng;
+      radiusKm = boards[0].radius_km;
+    }
   }
 
 
@@ -1510,20 +1536,19 @@
   const lng = Number(fire.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-  const province = fire.province || "-";
-  const district = fire.district || "-";
-  const subdistrict = fire.subdistrict || "-";
-  const distance = Number.isFinite(Number(fire.distance))
-    ? Number(fire.distance).toFixed(2)
-    : "-";
+  const covered = getBoardDistances(lat, lng);
+  const active = covered.filter(item => item.inside);
+  const boardText = active.length
+    ? active.map(item => `${item.board_id} (${item.distance_km.toFixed(2)} กม.)`).join(", ")
+    : "ไม่มีบอร์ดอยู่ในรัศมี";
 
   area.innerHTML =
-    "<b>📍 พื้นที่:</b> ต." + escapeHtml(subdistrict) +
-    " อ." + escapeHtml(district) +
-    " จ." + escapeHtml(province) +
+    "<b>📍 พื้นที่:</b> ต." + escapeHtml(fire.subdistrict || "-") +
+    " อ." + escapeHtml(fire.district || "-") +
+    " จ." + escapeHtml(fire.province || "-") +
     "<br><b>📌 พิกัด:</b> " + lat.toFixed(6) + ", " + lng.toFixed(6) +
-    "<br><b>📏 ระยะจาก CR01:</b> " + distance + " กม." +
-    "<br><span style='font-size:13px;color:#666;'>จุดนี้เป็นจุดจำลองเดียวกับที่แสดงบนแผนที่</span>";
+    "<br><b>🚨 บอร์ดที่อยู่ในรัศมี:</b> " + escapeHtml(boardText) +
+    "<br><span style='font-size:13px;color:#666;'>ลาก 🔥 จุดนี้บนแผนที่เพื่อเปลี่ยนบอร์ดที่แจ้งเตือน</span>";
 
   maps.href =
     "https://www.google.com/maps/dir/?api=1&destination=" +
@@ -1537,237 +1562,149 @@ function hideDemoIncidentCard() {
   if (card) card.style.display = "none";
 }
 
-function renderFires() {
-    const demoFire =
-      fireEvents.find(fire => fire.source === "DEMO");
+function getBoardDistances(lat, lng) {
+    return (CONFIG.demoBoards || []).map(board => {
+      const distance = haversineKm(board.lat, board.lng, lat, lng);
+      return { ...board, distance_km: distance, inside: distance <= board.radius_km };
+    });
+  }
 
-    if (demoFire) {
-      showDemoIncidentCard(demoFire);
-    } else {
-      hideDemoIncidentCard();
+  function updateDemoBoardStatus(lat, lng) {
+    const items = getBoardDistances(lat, lng);
+    demoCoveredBoards = items.filter(item => item.inside);
+    const box = document.getElementById("demoBoardStatus");
+    if (box) {
+      box.innerHTML = items.map(item =>
+        `<div style="margin:4px 0"><b>${escapeHtml(item.board_id)}</b> — ${item.distance_km.toFixed(2)} กม. / ${item.radius_km} กม. ` +
+        (item.inside ? `<span class="badge alert">🔴 แจ้งเตือน</span>` : `<span class="badge safe">🟢 ปกติ</span>`) +
+        `</div>`
+      ).join("");
     }
+    updateBoardOnMap();
+    return items;
+  }
 
-    fireLayer.clearLayers();
+  function placeDemoFireMarker(fire) {
+    if (!map || !fire) return;
+    if (demoFireMarker) map.removeLayer(demoFireMarker);
+    demoFireMarker = L.marker([fire.lat, fire.lng], {
+      draggable: fireWatchRole === "demo",
+      zIndexOffset: 1000
+    }).addTo(map);
+    demoFireMarker.bindPopup("<b>🔥 จุดไฟจำลอง</b><br>ลากจุดนี้ไปยัง CR01 หรือ CR02 เพื่อทดสอบ");
+    demoFireMarker.on("drag", () => {
+      const pos = demoFireMarker.getLatLng();
+      fire.lat = pos.lat;
+      fire.lng = pos.lng;
+      updateDemoBoardStatus(pos.lat, pos.lng);
+      renderFires();
+      if (demoFireDragTimer) clearTimeout(demoFireDragTimer);
+      demoFireDragTimer = setTimeout(publishDemoFirePosition, 300);
+    });
+    demoFireMarker.on("dragend", publishDemoFirePosition);
+  }
 
-    const table =
-      document.getElementById(
-        "fireTable"
-      );
+  async function publishDemoFirePosition() {
+    const fire = fireEvents.find(item => item.source === "DEMO");
+    if (!fire) return;
+    updateDemoBoardStatus(fire.lat, fire.lng);
+    showDemoIncidentCard(fire);
+    try {
+      const response = await fetch("/api/demo/alert", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ lat: fire.lat, lng: fire.lng })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.ok) {
+        demoCoveredBoards = data.coveredBoards || [];
+        evaluateDemoAlert();
+      }
+    } catch (error) {
+      log("อัปเดต DEMO ไม่สำเร็จ: " + error.message);
+    }
+  }
 
-    table.innerHTML = "";
-
-    if (!fireEvents.length) {
-      table.innerHTML =
-        "<tr>" +
-        "<td colspan=\"7\">" +
-        "ไม่พบข้อมูลจุดความร้อน" +
-        "</td>" +
-        "</tr>";
-
-      document.getElementById(
-        "fireCount"
-      ).textContent = "0";
-
-      document.getElementById(
-        "nearestDistance"
-      ).textContent = "-";
-
-      hideDemoIncidentCard();
+  function evaluateDemoAlert() {
+    const fire = fireEvents.find(item => item.source === "DEMO");
+    if (!fire) {
+      setAlertState(false, "DEMO");
       return;
     }
+    const items = updateDemoBoardStatus(fire.lat, fire.lng);
+    const active = items.filter(item => item.inside);
+    currentAlert = active.length > 0;
+    currentSource = "DEMO";
+    const box = document.getElementById("statusBox");
+    if (currentAlert) {
+      box.className = "status alert";
+      box.innerHTML = "🧪 DEMO: แจ้งเตือน " + active.map(item => item.board_id).join(" + ") +
+        "<div class=\"small\" style=\"margin-top:6px\">" +
+        active.map(item => `${item.board_id}: ${item.distance_km.toFixed(2)} กม.`).join("<br>") + "</div>";
+    } else {
+      box.className = "status safe";
+      box.innerHTML = "🟢 DEMO: จุดไฟอยู่นอกพื้นที่ของทั้ง 2 บอร์ด";
+    }
+    document.getElementById("sourceText").textContent = "DEMO";
+    document.getElementById("payloadBox").textContent = JSON.stringify({
+      demo: true, fire: currentAlert, fire_lat: fire.lat, fire_lng: fire.lng,
+      boards: items.map(item => ({ board_id: item.board_id, distance_km: Number(item.distance_km.toFixed(3)), fire: item.inside }))
+    }, null, 2);
+    renderFires();
+  }
 
-    let nearest =
-      Infinity;
-
-    fireEvents.forEach(
-      fire => {
-        fire.distance =
-          haversineKm(
-            boardLat,
-            boardLng,
-            fire.lat,
-            fire.lng
-          );
-
-        if (
-          fire.distance <
-          nearest
-        ) {
-          nearest =
-            fire.distance;
-        }
-
-        const inside =
-          fire.distance <=
-          radiusKm;
-
-        const marker =
-          L.circleMarker(
-            [
-              fire.lat,
-              fire.lng
-            ],
-            {
-              radius:
-                inside ? 9 : 6,
-
-              color:
-                inside
-                  ? "#e53935"
-                  : "#1f9d55",
-
-              fillColor:
-                inside
-                  ? "#e53935"
-                  : "#1f9d55",
-
-              fillOpacity: .85,
-
-              weight: 2
-            }
-          );
-
-        const title =
-          fire.source === "DEMO"
-            ? "🔥 จุดความร้อน (DEMO)"
-            : "🔥 จุดความร้อน";
-
-        const mapsUrl =
-          "https://www.google.com/maps/dir/?api=1&destination=" +
-          fire.lat.toFixed(6) +
-          "," +
-          fire.lng.toFixed(6);
-
-        marker.bindPopup(
-          "<b>" +
-          title +
-          "</b><br><br>" +
-
-          "<b>📍 จุดเกิดเหตุ</b><br>" +
-          escapeHtml(
-            areaText(fire)
-          ) +
-          "<br><br>" +
-
-          "<b>พิกัดจริงบนแผนที่</b><br>" +
-          "Lat: " +
-          fire.lat.toFixed(6) +
-          "<br>" +
-          "Lng: " +
-          fire.lng.toFixed(6) +
-          "<br>" +
-
-          "ระยะจากบอร์ด CR01: " +
-          fire.distance.toFixed(2) +
-          " กม.<br>" +
-
-          "วันที่: " +
-          escapeHtml(
-            fire.date
-          ) +
-          "<br>" +
-
-          "เวลา: " +
-          escapeHtml(
-            fire.time
-          ) +
-
-          (
-            fire.source === "DEMO"
-              ? "<br><br><b>⚠️ ข้อมูลจำลองเพื่อสาธิตสถานการณ์จริง</b>"
-              : ""
-          ) +
-
-          "<br><br>" +
-          "<a href=\"" +
-          escapeHtml(mapsUrl) +
-          "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
-          "🗺️ เปิดจุดเกิดเหตุใน Google Maps" +
-          "</a>"
-        );
-
-        marker.addTo(
-          fireLayer
-        );
-
-        const tr =
-          document.createElement(
-            "tr"
-          );
-
-        tr.innerHTML =
-          "<td>" +
-          (
-            inside
-              ? "<span class=\"badge alert\">แจ้งเตือน</span>"
-              : "<span class=\"badge safe\">ปกติ</span>"
-          ) +
-          "</td>" +
-
-          "<td>" +
-          fire.lat.toFixed(5) +
-          ", " +
-          fire.lng.toFixed(5) +
-
-          (
-            fire.source === "DEMO"
-              ? "<br><b>DEMO</b>"
-              : ""
-          ) +
-
-          "</td>" +
-
-          "<td>" +
-          fire.distance.toFixed(2) +
-          "</td>" +
-
-          "<td>" +
-          escapeHtml(
-            fire.date
-          ) +
-          "</td>" +
-
-          "<td>" +
-          escapeHtml(
-            fire.time
-          ) +
-          "</td>" +
-
-          "<td class=\"area-line\">" +
-          escapeHtml(
-            areaText(fire)
-          ) +
-          (
-            fire.source === "DEMO"
-              ? "<br><span class=\"small\">📍 จุดเกิดเหตุจำลอง</span>"
-              : ""
-          ) +
-          "</td>" +
-
-          "<td>" +
-          escapeHtml(
-            String(fire.frp)
-          ) +
-          "</td>";
-
-        table.appendChild(
-          tr
-        );
-      }
-    );
-
-    document.getElementById(
-      "fireCount"
-    ).textContent =
-      fireEvents.length;
-
-    document.getElementById(
-      "nearestDistance"
-    ).textContent =
-      Number.isFinite(nearest)
-        ? nearest.toFixed(2) +
-          " กม."
-        : "-";
+  function renderFires() {
+    const demoFire = fireEvents.find(fire => fire.source === "DEMO");
+    if (demoFire) {
+      showDemoIncidentCard(demoFire);
+      placeDemoFireMarker(demoFire);
+    } else {
+      hideDemoIncidentCard();
+      if (demoFireMarker && map) { map.removeLayer(demoFireMarker); demoFireMarker = null; }
+    }
+    fireLayer.clearLayers();
+    const table = document.getElementById("fireTable");
+    table.innerHTML = "";
+    if (!fireEvents.length) {
+      table.innerHTML = "<tr><td colspan=\"7\">ไม่พบข้อมูลจุดความร้อน</td></tr>";
+      document.getElementById("fireCount").textContent = "0";
+      document.getElementById("nearestDistance").textContent = "-";
+      return;
+    }
+    let nearest = Infinity;
+    fireEvents.forEach(fire => {
+      const isDemo = fire.source === "DEMO";
+      const selectedDistance = haversineKm(boardLat, boardLng, fire.lat, fire.lng);
+      const distances = isDemo
+        ? getBoardDistances(fire.lat, fire.lng)
+        : [{ board_id: "CR01", name: "ESP32 Board 01", distance_km: selectedDistance, radius_km: radiusKm, inside: selectedDistance <= radiusKm }];
+      const nearestBoard = distances.reduce((best, item) => !best || item.distance_km < best.distance_km ? item : best, null);
+      fire.distance = nearestBoard ? nearestBoard.distance_km : Infinity;
+      if (fire.distance < nearest) nearest = fire.distance;
+      const activeBoards = distances.filter(item => item.inside);
+      const inside = activeBoards.length > 0;
+      const marker = L.circleMarker([fire.lat, fire.lng], { radius: inside ? 9 : 6, color: inside ? "#e53935" : "#1f9d55", fillColor: inside ? "#e53935" : "#1f9d55", fillOpacity: .85, weight: 2 });
+      const mapsUrl = "https://www.google.com/maps/dir/?api=1&destination=" + fire.lat.toFixed(6) + "," + fire.lng.toFixed(6);
+      const boardText = activeBoards.length ? activeBoards.map(item => item.board_id + " " + item.distance_km.toFixed(2) + " กม.").join(", ") : "ไม่มีบอร์ด";
+      marker.bindPopup("<b>" + (fire.source === "DEMO" ? "🔥 จุดความร้อน (DEMO)" : "🔥 จุดความร้อน") + "</b><br><br>" +
+        "<b>📍 จุดเกิดเหตุ</b><br>" + escapeHtml(areaText(fire)) + "<br><br>" +
+        "พิกัด: " + fire.lat.toFixed(6) + ", " + fire.lng.toFixed(6) + "<br>" +
+        "บอร์ดในรัศมี: " + escapeHtml(boardText) + "<br>" +
+        "วันที่: " + escapeHtml(fire.date) + "<br>เวลา: " + escapeHtml(fire.time) + "<br><br>" +
+        "<a href=\"" + escapeHtml(mapsUrl) + "\" target=\"_blank\" rel=\"noopener noreferrer\">🗺️ เปิดจุดเกิดเหตุใน Google Maps</a>");
+      marker.addTo(fireLayer);
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + (inside ? "<span class=\"badge alert\">แจ้งเตือน</span>" : "<span class=\"badge safe\">ปกติ</span>") + "</td>" +
+        "<td>" + fire.lat.toFixed(5) + ", " + fire.lng.toFixed(5) + (fire.source === "DEMO" ? "<br><b>DEMO</b>" : "") + "</td>" +
+        "<td>" + fire.distance.toFixed(2) + "</td>" +
+        "<td>" + escapeHtml(fire.date) + "</td>" +
+        "<td>" + escapeHtml(fire.time) + "</td>" +
+        "<td class=\"area-line\">" + escapeHtml(areaText(fire)) + (inside ? "<br><span class=\"small\">🚨 " + escapeHtml(boardText) + "</span>" : "") + "</td>" +
+        "<td>" + escapeHtml(String(fire.frp)) + "</td>";
+      table.appendChild(tr);
+    });
+    document.getElementById("fireCount").textContent = fireEvents.length;
+    document.getElementById("nearestDistance").textContent = Number.isFinite(nearest) ? nearest.toFixed(2) + " กม." : "-";
   }
 
 
@@ -1776,58 +1713,29 @@ function renderFires() {
      ========================================================= */
 
   function evaluateAlert() {
-    if (!fireEvents.length) {
-      setAlertState(
-        false,
-        "NONE"
-      );
-
+    if (fireEvents.some(fire => fire.source === "DEMO")) {
+      evaluateDemoAlert();
       return;
     }
 
-    let nearestFire =
-      null;
-
-    fireEvents.forEach(
-      fire => {
-        fire.distance =
-          haversineKm(
-            boardLat,
-            boardLng,
-            fire.lat,
-            fire.lng
-          );
-
-        if (
-          fire.distance <=
-          radiusKm &&
-          (
-            nearestFire === null ||
-            fire.distance <
-            nearestFire.distance
-          )
-        ) {
-          nearestFire =
-            fire;
-        }
-      }
-    );
-
-    if (nearestFire) {
-      setAlertState(
-        true,
-        currentSource ||
-        "GISTDA",
-        nearestFire
-      );
-    } else {
-      setAlertState(
-        false,
-        currentSource ||
-        "GISTDA"
-      );
+    if (!fireEvents.length) {
+      setAlertState(false, "NONE");
+      return;
     }
 
+    let nearestFire = null;
+    fireEvents.forEach(fire => {
+      fire.distance = haversineKm(boardLat, boardLng, fire.lat, fire.lng);
+      if (fire.distance <= radiusKm && (!nearestFire || fire.distance < nearestFire.distance)) {
+        nearestFire = fire;
+      }
+    });
+
+    setAlertState(
+      Boolean(nearestFire),
+      currentSource || "GISTDA",
+      nearestFire
+    );
     renderFires();
   }
 
@@ -2767,274 +2675,115 @@ function renderFires() {
      ========================================================= */
 
   async function startAutomaticDemo() {
-    if (
-      fireWatchRole !==
-      "demo"
-    ) {
-      return;
-    }
+    if (fireWatchRole !== "demo" || demoStarted || demoRunning) return;
 
-    if (
-      demoStarted ||
-      demoRunning
-    ) {
-      return;
-    }
-
-    demoStarted =
-      true;
-
-    demoRunning =
-      true;
+    demoStarted = true;
+    demoRunning = true;
 
     try {
-      updateDemoStatus(
-        "กำลังเตรียมการสาธิต..."
-      );
-
+      updateDemoStatus("กำลังเตรียมการสาธิต...");
       await showDemoCountdown();
 
-      /*
-        DEMO ใช้ตำแหน่งบอร์ดตัวอย่างแบบคงที่
-        เพื่อให้พื้นที่กับบอร์ดตรงกันทุกครั้ง
-      */
+      const board = CONFIG.demoBoards[0];
+      const demoLat = board.lat + (CONFIG.demoDistanceKm / 111.32);
+      const demoLng = board.lng;
+      const now = new Date();
 
-      boardLat =
-        CONFIG.demoBoardLat;
+      fireEvents = [{
+        id: "DEMO-" + Date.now(),
+        lat: demoLat,
+        lng: demoLng,
+        province: CONFIG.demoProvince,
+        district: CONFIG.demoDistrict,
+        subdistrict: CONFIG.demoSubdistrict,
+        date: now.toISOString().slice(0,10),
+        time: now.toTimeString().slice(0,5),
+        frp: "DEMO",
+        brightness: "DEMO",
+        satellite: "DEMO",
+        source: "DEMO"
+      }];
 
-      boardLng =
-        CONFIG.demoBoardLng;
-
-      document.getElementById(
-        "boardLat"
-      ).value =
-        boardLat.toFixed(6);
-
-      document.getElementById(
-        "boardLng"
-      ).value =
-        boardLng.toFixed(6);
-
-      updateBoardOnMap();
+      currentSource = "DEMO";
+      renderFires();
+      updateDemoBoardStatus(demoLat, demoLng);
+      evaluateDemoAlert();
 
       if (map) {
-        map.setView(
-          [
-            boardLat,
-            boardLng
-          ],
-          CONFIG.mapZoom
+        const bounds = L.latLngBounds(
+          CONFIG.demoBoards.map(item => [item.lat, item.lng])
         );
+        CONFIG.demoBoards.forEach(item => {
+          bounds.extend(L.circle([item.lat, item.lng], { radius: item.radius_km * 1000 }).getBounds());
+        });
+        bounds.extend([demoLat, demoLng]);
+        map.fitBounds(bounds.pad(0.15), { maxZoom: 10 });
       }
 
-      updateDemoStatus(
-        "📍 ใช้ตำแหน่งบอร์ด DEMO: " +
-        "19.9105, 99.8406"
-      );
-
-      /*
-        CREATE FIRE 2 KM NORTH
-      */
-
-      const demoLat =
-        boardLat +
-        (
-          CONFIG.demoDistanceKm /
-          111.32
-        );
-
-      const demoLng =
-        boardLng;
-
-      const now =
-        new Date();
-
-      fireEvents = [
-        {
-          id:
-            "DEMO-" +
-            Date.now(),
-
-          lat:
-            demoLat,
-
-          lng:
-            demoLng,
-
-          province:
-            CONFIG.demoProvince,
-
-          district:
-            CONFIG.demoDistrict,
-
-          subdistrict:
-            CONFIG.demoSubdistrict,
-
-          date:
-            now
-              .toISOString()
-              .slice(0,10),
-
-          time:
-            now
-              .toTimeString()
-              .slice(0,5),
-
-          frp:
-            "DEMO",
-
-          brightness:
-            "DEMO",
-
-          satellite:
-            "DEMO",
-
-          source:
-            "DEMO"
-        }
-      ];
-
-      currentSource =
-        "DEMO";
-
-      renderFires();
-
-      evaluateAlert();
+      await publishDemoFirePosition();
 
       updateDemoStatus(
-        currentAlert
-          ? "🧪 DEMO: ตรวจพบไฟป่าจำลองในรัศมี<br>" +
-            "<span class=\"small\">" +
-            "📍 จุดเกิดเหตุ: ต.รอบเวียง อ.เมืองเชียงราย จ.เชียงราย<br>" +
-            "พิกัด: " +
-            demoLat.toFixed(6) +
-            ", " +
-            demoLng.toFixed(6) +
-            "<br>ระยะจาก CR01: " +
-            CONFIG.demoDistanceKm.toFixed(2) +
-            " กม." +
-            "</span>"
-          : "🧪 DEMO: สร้างจุดไฟจำลองแล้ว",
-        currentAlert
-      );
-
-      log(
-        "สร้างจุดเกิดเหตุ DEMO: " +
-        demoLat.toFixed(6) +
-        ", " +
-        demoLng.toFixed(6) +
-        " | ต.รอบเวียง อ.เมืองเชียงราย จ.เชียงราย | ห่าง CR01 " +
-        CONFIG.demoDistanceKm.toFixed(2) +
-        " กม."
-      );
-
-      /*
-        SEND DEMO TO BACKEND / LINE
-      */
-
-      const response =
-        await fetch(
-          "/api/demo/alert",
-          {
-            method: "POST",
-
-            headers:
-              authHeaders({
-                "Content-Type":
-                  "application/json"
-              }),
-
-            body:
-              JSON.stringify({
-                lat:
-                  demoLat,
-
-                lng:
-                  demoLng,
-
-                board_lat:
-                  boardLat,
-
-                board_lng:
-                  boardLng,
-
-                distance_km:
-                  CONFIG.demoDistanceKm
-              })
-          }
-        );
-
-      const data =
-        await response
-          .json()
-          .catch(
-            () => ({})
-          );
-
-      if (
-        response.ok &&
-        data.ok
-      ) {
-        log(
-          "ส่ง DEMO แจ้งเตือน LINE แล้ว"
-        );
-      } else {
-        log(
-          "สร้าง DEMO สำเร็จ แต่ส่ง LINE ไม่สำเร็จ: " +
-          (
-            data.reason ||
-            data.error ||
-            "unknown"
-          )
-        );
-      }
-
-      /*
-        SEND TO ESP32 IF LOCAL URL EXISTS
-      */
-
-      await sendCurrentToEsp32();
-
-      updateDemoStatus(
-        "🧪 DEMO: พร้อมสาธิต — พบไฟป่าจำลอง<br>" +
-        "<span class=\"small\">" +
-        "📍 จุดเกิดเหตุ: ต.รอบเวียง อ.เมืองเชียงราย จ.เชียงราย<br>" +
-        "พิกัด: " +
-        demoLat.toFixed(6) +
-        ", " +
-        demoLng.toFixed(6) +
-        "<br>ระยะจาก CR01: " +
-        CONFIG.demoDistanceKm.toFixed(2) +
-        " กม.<br>" +
-        "🗺️ จุดนี้แสดงเป็น Marker บนแผนที่" +
-        "</span>",
+        "🧪 DEMO พร้อมสาธิต — ลาก 🔥 จุดไฟไปยัง CR01 / CR02 ได้เลย<br>" +
+        "<span class=\"small\">ระบบจะคำนวณระยะของแต่ละบอร์ดแยกกัน</span>",
         true
       );
 
-    } catch (error) {
-      console.error(
-        "Automatic demo error:",
-        error
-      );
-
-      updateDemoStatus(
-        "❌ DEMO ขัดข้อง: " +
-        escapeHtml(
-          error.message
-        )
-      );
-
       log(
-        "Automatic DEMO error: " +
-        error.message
+        "เริ่ม DEMO 2 บอร์ด — จุดไฟ " +
+        demoLat.toFixed(6) + ", " + demoLng.toFixed(6)
       );
-
+    } catch (error) {
+      console.error("Automatic demo error:", error);
+      updateDemoStatus("❌ DEMO ขัดข้อง: " + escapeHtml(error.message));
+      log("Automatic DEMO error: " + error.message);
     } finally {
       hideDemoCountdown();
-
-      demoRunning =
-        false;
+      demoRunning = false;
     }
+  }
+
+  async function moveDemoFireToBoard(boardId) {
+    if (fireWatchRole !== "demo") return;
+    const board = CONFIG.demoBoards.find(item => item.board_id === boardId);
+    const fire = fireEvents.find(item => item.source === "DEMO");
+    if (!board || !fire) return;
+
+    fire.lat = board.lat + 0.01;
+    fire.lng = board.lng;
+    if (demoFireMarker) demoFireMarker.setLatLng([fire.lat, fire.lng]);
+    renderFires();
+    updateDemoBoardStatus(fire.lat, fire.lng);
+    await publishDemoFirePosition();
+  }
+
+  async function clearDemoFire() {
+    if (fireWatchRole !== "demo") return;
+
+    try {
+      await fetch("/api/demo/clear", {
+        method: "POST",
+        headers: authHeaders()
+      });
+    } catch (error) {
+      console.error(error);
+    }
+
+    fireEvents = [];
+    demoCoveredBoards = [];
+    currentAlert = false;
+    currentSource = "DEMO";
+
+    if (demoFireMarker && map) {
+      map.removeLayer(demoFireMarker);
+      demoFireMarker = null;
+    }
+
+    fireLayer.clearLayers();
+    renderFires();
+    updateBoardOnMap();
+    setAlertState(false, "DEMO");
+    updateDemoStatus("🟢 DEMO หยุดแล้ว — บอร์ดทุกตัวกลับสู่ปกติ", false);
+    log("หยุด DEMO และสั่งปิดสถานะไฟจำลองแล้ว");
   }
 
 

@@ -80,16 +80,14 @@ const ESP32_BOARDS = [
     lat: 19.9105,
     lng: 99.8406,
     radius_km: 20
+  },
+  {
+    board_id: "CR02",
+    name: "ESP32 Board 02",
+    lat: 19.5500,
+    lng: 100.1000,
+    radius_km: 20
   }
-
-  // ตัวอย่างบอร์ดที่ 2
-  // {
-  //   board_id: "CR02",
-  //   name: "ESP32 Board 02",
-  //   lat: 19.8500,
-  //   lng: 99.9000,
-  //   radius_km: 20
-  // }
 ];
 
 // =====================================================
@@ -781,6 +779,33 @@ function findResponsibleBoard(
   return bestBoard;
 }
 
+
+// =====================================================
+// FIND ALL BOARDS COVERING FIRE
+// =====================================================
+
+function findBoardsForFire(
+  fireLat,
+  fireLng
+) {
+  return ESP32_BOARDS
+    .map(board => {
+      const distance =
+        haversineKm(
+          board.lat,
+          board.lng,
+          fireLat,
+          fireLng
+        );
+
+      return {
+        ...board,
+        distance_km: distance,
+        inside: distance <= board.radius_km
+      };
+    })
+    .filter(board => board.inside);
+}
 // =====================================================
 // LIST ESP32 BOARDS
 // =====================================================
@@ -1276,62 +1301,52 @@ app.get(
 
     // -----------------------------------------
     // DEMO FIRE STATE
-    // ถ้ามี DEMO ที่ยังไม่หมดอายุ ให้ ESP32 เห็นไฟทันที
-    // โดยไม่ต้องรอ GISTDA
+    // คำนวณจากพิกัดไฟจริงกับบอร์ดแต่ละตัว
     // -----------------------------------------
 
     if (
       demoFireState.active &&
       demoFireState.data &&
-      Date.now() - demoFireState.timestamp < DEMO_FIRE_MS &&
-      (
-        demoFireState.data.board_id === board.board_id ||
-        demoFireState.data.board_id === "-"
-      )
+      Date.now() - demoFireState.timestamp < DEMO_FIRE_MS
     ) {
-      console.log(
-        `ESP32 DEMO FIRE: ${board.board_id}`
+      const fireLat = Number(demoFireState.data.lat);
+      const fireLng = Number(demoFireState.data.lng);
+      const distance = haversineKm(
+        board.lat,
+        board.lng,
+        fireLat,
+        fireLng
       );
 
-      return res.json({
-        ok: true,
-        fire: true,
-        board_id: board.board_id,
-        board_name: board.name,
-        distance_km:
-          Number.isFinite(
-            Number(demoFireState.data.distance_km)
-          )
-            ? Number(
-                Number(
-                  demoFireState.data.distance_km
-                ).toFixed(2)
-              )
-            : null,
-        lat: demoFireState.data.lat,
-        lng: demoFireState.data.lng,
-        source: "DEMO",
-        province:
-          demoFireState.data.province || "",
-        district:
-          demoFireState.data.district || "",
-        subdistrict:
-          demoFireState.data.subdistrict || "",
-        date:
-          demoFireState.data.date || "",
-        time:
-          demoFireState.data.time || "",
-        radius_km: board.radius_km
-      });
+      if (distance <= board.radius_km) {
+        console.log(
+          `ESP32 DEMO FIRE: ${board.board_id} / ${distance.toFixed(2)} km`
+        );
+
+        return res.json({
+          ok: true,
+          fire: true,
+          board_id: board.board_id,
+          board_name: board.name,
+          distance_km: Number(distance.toFixed(2)),
+          lat: fireLat,
+          lng: fireLng,
+          source: "DEMO",
+          province: demoFireState.data.province || "",
+          district: demoFireState.data.district || "",
+          subdistrict: demoFireState.data.subdistrict || "",
+          date: demoFireState.data.date || "",
+          time: demoFireState.data.time || "",
+          radius_km: board.radius_km
+        });
+      }
     }
 
-    // หมดอายุแล้ว ล้างสถานะ DEMO
     if (
       demoFireState.active &&
       Date.now() - demoFireState.timestamp >= DEMO_FIRE_MS
     ) {
       console.log("DEMO FIRE STATE: EXPIRED");
-
       demoFireState = {
         active: false,
         data: null,
@@ -1418,21 +1433,31 @@ app.get(
         fireLng
       );
 
+    const boards = findBoardsForFire(
+      fireLat,
+      fireLng
+    );
+
     if (!board) {
       return res.json({
         ok: true,
-        responsible:
-          false,
-        board: null
+        responsible: false,
+        board: null,
+        boards: []
       });
     }
 
     return res.json({
       ok: true,
-
-      responsible:
-        true,
-
+      responsible: true,
+      boards: boards.map(item => ({
+        board_id: item.board_id,
+        name: item.name,
+        lat: item.lat,
+        lng: item.lng,
+        radius_km: item.radius_km,
+        distance_km: Number(item.distance_km.toFixed(2))
+      })),
       board: {
         board_id:
           board.board_id,
@@ -1942,6 +1967,12 @@ app.post(
         demoLng
       );
 
+    const coveredBoards =
+      findBoardsForFire(
+        demoLat,
+        demoLng
+      );
+
     const mapsUrl =
       `https://www.google.com/maps/dir/?api=1&destination=${demoLat},${demoLng}`;
 
@@ -2140,6 +2171,14 @@ app.post(
           responsibleBoard
         ),
 
+      coveredBoards:
+        coveredBoards.map(item => ({
+          board_id: item.board_id,
+          name: item.name,
+          distance_km: Number(item.distance_km.toFixed(2)),
+          radius_km: item.radius_km
+        })),
+
       board:
         responsibleBoard
           ? {
@@ -2177,6 +2216,29 @@ app.post(
             )
           )
       }
+    });
+  }
+);
+
+// =====================================================
+// CLEAR DEMO ALERT
+// =====================================================
+
+app.post(
+  "/api/demo/clear",
+  requireOfficerOrDemo,
+  (req, res) => {
+    demoFireState = {
+      active: false,
+      data: null,
+      timestamp: 0
+    };
+
+    console.log("DEMO FIRE STATE: CLEARED");
+
+    return res.json({
+      ok: true,
+      demo: false
     });
   }
 );
