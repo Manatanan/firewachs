@@ -108,6 +108,20 @@ let gistdaCache = {
 };
 
 // =====================================================
+// DEMO FIRE STATE
+// =====================================================
+// เก็บสถานะไฟจำลองให้ ESP32 Polling จาก Render เห็น
+// หมดอายุอัตโนมัติหลัง 5 นาที
+
+const DEMO_FIRE_MS = 5 * 60 * 1000;
+
+let demoFireState = {
+  active: false,
+  data: null,
+  timestamp: 0
+};
+
+// =====================================================
 // MIDDLEWARE
 // =====================================================
 
@@ -1260,6 +1274,71 @@ app.get(
       };
     }
 
+    // -----------------------------------------
+    // DEMO FIRE STATE
+    // ถ้ามี DEMO ที่ยังไม่หมดอายุ ให้ ESP32 เห็นไฟทันที
+    // โดยไม่ต้องรอ GISTDA
+    // -----------------------------------------
+
+    if (
+      demoFireState.active &&
+      demoFireState.data &&
+      Date.now() - demoFireState.timestamp < DEMO_FIRE_MS &&
+      (
+        demoFireState.data.board_id === board.board_id ||
+        demoFireState.data.board_id === "-"
+      )
+    ) {
+      console.log(
+        `ESP32 DEMO FIRE: ${board.board_id}`
+      );
+
+      return res.json({
+        ok: true,
+        fire: true,
+        board_id: board.board_id,
+        board_name: board.name,
+        distance_km:
+          Number.isFinite(
+            Number(demoFireState.data.distance_km)
+          )
+            ? Number(
+                Number(
+                  demoFireState.data.distance_km
+                ).toFixed(2)
+              )
+            : null,
+        lat: demoFireState.data.lat,
+        lng: demoFireState.data.lng,
+        source: "DEMO",
+        province:
+          demoFireState.data.province || "",
+        district:
+          demoFireState.data.district || "",
+        subdistrict:
+          demoFireState.data.subdistrict || "",
+        date:
+          demoFireState.data.date || "",
+        time:
+          demoFireState.data.time || "",
+        radius_km: board.radius_km
+      });
+    }
+
+    // หมดอายุแล้ว ล้างสถานะ DEMO
+    if (
+      demoFireState.active &&
+      Date.now() - demoFireState.timestamp >= DEMO_FIRE_MS
+    ) {
+      console.log("DEMO FIRE STATE: EXPIRED");
+
+      demoFireState = {
+        active: false,
+        data: null,
+        timestamp: 0
+      };
+    }
+
     try {
       const data =
         await getLatestGistdaData();
@@ -1284,20 +1363,22 @@ app.get(
         )
       );
 
-    } catch (error) {
-  console.error(
-    "ESP32 status error:",
-    error.message
-  );
+      } catch (error) {
+      console.error(
+        "ESP32 status error:",
+        error.message
+      );
 
-  return res.status(502).json({
-    ok: false,
-    error:
-      "Cannot get GISTDA data",
-    detail:
-      error.message
-  });
-}
+      return res.status(502).json({
+        ok: false,
+        error:
+          "Cannot get GISTDA data",
+        detail:
+          error.message
+      });
+    }
+  }
+);
 
 // =====================================================
 // FIND RESPONSIBLE BOARD FROM FIRE
@@ -1915,6 +1996,19 @@ app.post(
         "DEMO"
     };
 
+    // -----------------------------------------
+    // เปิดสถานะ DEMO ให้ ESP32 Polling เห็น
+    // -----------------------------------------
+    demoFireState = {
+      active: true,
+      data,
+      timestamp: Date.now()
+    };
+
+    console.log(
+      "DEMO FIRE STATE: ACTIVE"
+    );
+
     console.log(
       "================================="
     );
@@ -2068,7 +2162,21 @@ app.post(
 
       citizenSent,
 
-      lineError
+      lineError,
+
+      demoFireState: {
+        active: true,
+        expiresInSeconds:
+          Math.max(
+            0,
+            Math.ceil(
+              (
+                DEMO_FIRE_MS -
+                (Date.now() - demoFireState.timestamp)
+              ) / 1000
+            )
+          )
+      }
     });
   }
 );
