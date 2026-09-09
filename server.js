@@ -2270,6 +2270,33 @@ app.post(
   }
 );
 
+
+
+// =====================================================
+// LINE WEBHOOK - GET USER ID
+// =====================================================
+
+app.post("/webhook", (req, res) => {
+  try {
+    const events = req.body?.events || [];
+
+    for (const event of events) {
+      const userId = event?.source?.userId;
+
+      if (userId) {
+        console.log("=================================");
+        console.log("LINE USER ID:", userId);
+        console.log("EVENT TYPE:", event.type);
+        console.log("=================================");
+      }
+    }
+
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error("LINE WEBHOOK ERROR:", error.message);
+    return res.sendStatus(200);
+  }
+});
 // =====================================================
 // STATIC WEBSITE
 // =====================================================

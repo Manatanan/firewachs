@@ -2744,16 +2744,75 @@ function getBoardDistances(lat, lng) {
 
   async function moveDemoFireToBoard(boardId) {
     if (fireWatchRole !== "demo") return;
-    const board = CONFIG.demoBoards.find(item => item.board_id === boardId);
-    const fire = fireEvents.find(item => item.source === "DEMO");
-    if (!board || !fire) return;
 
-    fire.lat = board.lat + 0.01;
-    fire.lng = board.lng;
-    if (demoFireMarker) demoFireMarker.setLatLng([fire.lat, fire.lng]);
+    const board = CONFIG.demoBoards.find(
+      item => item.board_id === boardId
+    );
+
+    if (!board) return;
+
+    let fire = fireEvents.find(
+      item => item.source === "DEMO"
+    );
+
+    // ถ้ากด Stop DEMO ไปแล้ว จะไม่มี fire
+    // ดังนั้นสร้างจุดไฟ DEMO ขึ้นมาใหม่
+    if (!fire) {
+      const now = new Date();
+
+      fire = {
+        id: "DEMO-" + Date.now(),
+        lat: board.lat + 0.01,
+        lng: board.lng,
+        province: CONFIG.demoProvince,
+        district: CONFIG.demoDistrict,
+        subdistrict: CONFIG.demoSubdistrict,
+        date: now.toISOString().slice(0, 10),
+        time: now.toTimeString().slice(0, 5),
+        frp: "DEMO",
+        brightness: "DEMO",
+        satellite: "DEMO",
+        source: "DEMO"
+      };
+
+      fireEvents = [fire];
+    } else {
+      // ถ้ามีไฟอยู่แล้ว ให้ย้ายไปยังบอร์ดที่เลือก
+      fire.lat = board.lat + 0.01;
+      fire.lng = board.lng;
+    }
+
+    currentSource = "DEMO";
+    demoStarted = true;
+
+    // renderFires() จะสร้าง marker 🔥 ให้เอง
     renderFires();
-    updateDemoBoardStatus(fire.lat, fire.lng);
+
+    updateDemoBoardStatus(
+      fire.lat,
+      fire.lng
+    );
+
+    evaluateDemoAlert();
+
+    // ส่งตำแหน่งไป Backend เพื่อให้ ESP32 เห็นสถานะไฟ
     await publishDemoFirePosition();
+
+    updateDemoStatus(
+      "🧪 DEMO: ทดสอบ " +
+        escapeHtml(boardId) +
+        " — บอร์ดนี้อยู่ในรัศมีและควรแจ้งเตือน",
+      true
+    );
+
+    log(
+      "ย้ายจุดไฟ DEMO ไป " +
+        boardId +
+        " ที่ " +
+        fire.lat.toFixed(6) +
+        ", " +
+        fire.lng.toFixed(6)
+    );
   }
 
   async function clearDemoFire() {
