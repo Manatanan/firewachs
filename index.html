@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ระบบแจ้งเตือนไฟป่า | GISTDA + ESP32</title>
 
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
+
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -921,6 +924,7 @@
 </div>
 
 <script
+  defer
   src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""
@@ -1034,7 +1038,10 @@
       map =
         L.map("map", {
           preferCanvas: true,
-          zoomControl: true
+          zoomControl: true,
+          zoomAnimation: false,
+          fadeAnimation: false,
+          markerZoomAnimation: false
         }).setView(
           [boardLat, boardLng],
           CONFIG.mapZoom
@@ -1044,8 +1051,10 @@
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
           maxZoom: 19,
-          attribution: "&copy; OpenStreetMap contributors",
-          crossOrigin: true
+          updateWhenIdle: true,
+          updateWhenZooming: false,
+          keepBuffer: 1,
+          attribution: "&copy; OpenStreetMap contributors"
         }
       );
 
@@ -2744,77 +2753,28 @@ function getBoardDistances(lat, lng) {
 
   async function moveDemoFireToBoard(boardId) {
     if (fireWatchRole !== "demo") return;
-
-    const board = CONFIG.demoBoards.find(
-      item => item.board_id === boardId
-    );
-
+    const board = CONFIG.demoBoards.find(item => item.board_id === boardId);
     if (!board) return;
-
-    let fire = fireEvents.find(
-      item => item.source === "DEMO"
-    );
-
-    // ถ้ากด Stop DEMO ไปแล้ว จะไม่มี fire
-    // ดังนั้นสร้างจุดไฟ DEMO ขึ้นมาใหม่
+    let fire = fireEvents.find(item => item.source === "DEMO");
     if (!fire) {
       const now = new Date();
-
-      fire = {
-        id: "DEMO-" + Date.now(),
-        lat: board.lat + 0.01,
-        lng: board.lng,
-        province: CONFIG.demoProvince,
-        district: CONFIG.demoDistrict,
-        subdistrict: CONFIG.demoSubdistrict,
-        date: now.toISOString().slice(0, 10),
-        time: now.toTimeString().slice(0, 5),
-        frp: "DEMO",
-        brightness: "DEMO",
-        satellite: "DEMO",
-        source: "DEMO"
-      };
-
+      fire = { source: "DEMO", lat: board.lat + 0.01, lng: board.lng, province: CONFIG.demoProvince, district: CONFIG.demoDistrict, subdistrict: CONFIG.demoSubdistrict, date: now.toISOString().slice(0, 10), time: now.toTimeString().slice(0, 8), frp: 0, board_id: boardId };
       fireEvents = [fire];
+      if (map) placeDemoFireMarker(fire.lat, fire.lng);
     } else {
-      // ถ้ามีไฟอยู่แล้ว ให้ย้ายไปยังบอร์ดที่เลือก
       fire.lat = board.lat + 0.01;
       fire.lng = board.lng;
+      fire.board_id = boardId;
+      if (demoFireMarker) demoFireMarker.setLatLng([fire.lat, fire.lng]);
     }
-
-    currentSource = "DEMO";
     demoStarted = true;
-
-    // renderFires() จะสร้าง marker 🔥 ให้เอง
+    demoRunning = true;
+    currentSource = "DEMO";
     renderFires();
-
-    updateDemoBoardStatus(
-      fire.lat,
-      fire.lng
-    );
-
-    evaluateDemoAlert();
-
-    // ส่งตำแหน่งไป Backend เพื่อให้ ESP32 เห็นสถานะไฟ
+    updateDemoBoardStatus(fire.lat, fire.lng);
     await publishDemoFirePosition();
-
-    updateDemoStatus(
-      "🧪 DEMO: ทดสอบ " +
-        escapeHtml(boardId) +
-        " — บอร์ดนี้อยู่ในรัศมีและควรแจ้งเตือน",
-      true
-    );
-
-    log(
-      "ย้ายจุดไฟ DEMO ไป " +
-        boardId +
-        " ที่ " +
-        fire.lat.toFixed(6) +
-        ", " +
-        fire.lng.toFixed(6)
-    );
+    demoRunning = false;
   }
-
   async function clearDemoFire() {
     if (fireWatchRole !== "demo") return;
 
