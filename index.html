@@ -2187,6 +2187,31 @@ function getBoardDistances(lat, lng) {
 
 
   /* =========================================================
+     SHOW DASHBOARD MAP AFTER LOGIN
+     ========================================================= */
+
+  function showDashboardMap() {
+    // Map is normally initialized on page load. If it is not ready yet,
+    // initialize it now so Login never requires a manual refresh.
+    if (!map) {
+      initMap();
+    }
+
+    // Leaflet needs a size recalculation after the login overlay disappears.
+    const refreshMapSize = () => {
+      if (map) {
+        map.invalidateSize(true);
+      }
+    };
+
+    refreshMapSize();
+    setTimeout(refreshMapSize, 50);
+    setTimeout(refreshMapSize, 150);
+    setTimeout(refreshMapSize, 300);
+  }
+
+
+  /* =========================================================
      LOGIN
      ========================================================= */
 
@@ -2273,6 +2298,9 @@ function getBoardDistances(lat, lng) {
         "roleBar"
       ).style.display =
         "flex";
+
+      // Show and resize the Leaflet map immediately after Login.
+      showDashboardMap();
 
       if (
         data.role === "demo"
