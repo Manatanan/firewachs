@@ -2720,6 +2720,8 @@ function getBoardDistances(lat, lng) {
       updateDemoStatus("กำลังเตรียมการสาธิต...");
       await showDemoCountdown();
 
+      // หลังนับถอยหลังเสร็จ ให้จำลองไฟในพื้นที่ CR01
+      // และสั่งให้ CR01 อยู่ในสถานะแจ้งเตือนทันที
       const board = CONFIG.demoBoards[0];
       const demoLat = board.lat + (CONFIG.demoDistanceKm / 111.32);
       const demoLng = board.lng;
@@ -2744,6 +2746,10 @@ function getBoardDistances(lat, lng) {
       renderFires();
       updateDemoBoardStatus(demoLat, demoLng);
       evaluateDemoAlert();
+
+      // DEMO: จุดไฟเริ่มต้นอยู่ในรัศมี CR01 ดังนั้นให้ CR01 ดังทันที
+      // โดยยังคงใช้ flow เดิมของ /api/demo/alert เพื่อ sync สถานะกับ Render
+      log("🔥 DEMO นับถอยหลังเสร็จ — CR01 อยู่ในรัศมี เริ่มแจ้งเตือนทันที");
 
       if (map) {
         const bounds = L.latLngBounds(
